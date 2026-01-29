@@ -101,3 +101,42 @@ class RAGService:
         filtered = filtered[:top_k]
 
         return await self._answer_from_chunks(question, filtered)
+
+    async def query_for_user(
+        self,
+        user_id: str,
+        question: str,
+        category: str | None = None,
+        topic: str | None = None,
+        language: str | None = None,
+        top_k: int = 5,
+    ) -> Dict[str, Any]:
+        """
+        Answer a question using RAG across all documents owned by a user.
+        """
+        question_embedding = get_text_embedding(question)
+
+        # Overfetch to allow for filtering
+        raw_chunks = self.vector_repo.similarity_search_by_user(
+            query_embedding=question_embedding,
+            user_id=user_id,
+            top_k=max(top_k * 4, top_k),
+        )
+
+        # Exclude image documents from RAG context
+        non_image = [c for c in raw_chunks if c.get("type") != "image"]
+
+        def _matches_filters(chunk: Dict[str, Any]) -> bool:
+            md = chunk.get("metadata") or {}
+            if category and md.get("category") != category:
+                return False
+            if topic and md.get("topic") != topic:
+                return False
+            if language and md.get("language") != language:
+                return False
+            return True
+
+        filtered = [c for c in non_image if _matches_filters(c)]
+        filtered = filtered[:top_k]
+
+        return await self._answer_from_chunks(question, filtered)

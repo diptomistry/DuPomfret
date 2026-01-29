@@ -45,6 +45,11 @@ class User:
     def is_admin(self) -> bool:
         """Check if user has admin role."""
         return self.role == "admin"
+    
+    @property
+    def id(self) -> str:
+        """Backward-compatible alias for user_id."""
+        return self.user_id
 
 
 def _supabase_jwks_url() -> str:

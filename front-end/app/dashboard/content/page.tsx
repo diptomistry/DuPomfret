@@ -20,14 +20,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
-  listCourses,
-  listCourseContents,
   ingestCourseContent,
   uploadFile,
   type Course,
   type CourseContent,
   type IngestRequest,
 } from "@/lib/courses-api";
+import { useCoursesStore } from "@/store/useCoursesStore";
 import { ROUTES } from "@/lib/constants";
 import {
   FileText,
@@ -44,6 +43,7 @@ import {
   ArrowRight,
   X,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 
 const MATERIAL_TYPES = ["slide", "pdf", "code", "note", "image"] as const;
@@ -66,12 +66,16 @@ export default function ContentPage() {
   const role = useAuthStore((s) => s.role);
   const token = session?.access_token ?? null;
 
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>(courseIdFromUrl ?? "");
-  const [contents, setContents] = useState<CourseContent[]>([]);
-  const [coursesLoading, setCoursesLoading] = useState(true);
-  const [contentsLoading, setContentsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const courses = useCoursesStore((s) => s.courses);
+  const coursesLoading = useCoursesStore((s) => s.coursesLoading);
+  const selectedCourseId = useCoursesStore((s) => s.selectedCourseId);
+  const setSelectedCourseId = useCoursesStore((s) => s.setSelectedCourseId);
+  const loadCourses = useCoursesStore((s) => s.loadCourses);
+  const loadContents = useCoursesStore((s) => s.loadContents);
+  const contentsLoading = useCoursesStore((s) => s.contentsLoading);
+  const contentsCache = useCoursesStore((s) => s.contentsCache);
+  const error = useCoursesStore((s) => s.error);
+  const setError = useCoursesStore((s) => s.setError);
 
   const [filterCategory, setFilterCategory] = useState<"all" | "theory" | "lab">("all");
   const [filterWeek, setFilterWeek] = useState<string>("");
@@ -82,55 +86,43 @@ export default function ContentPage() {
     }
   }, [courseIdFromUrl]);
 
+  async function reloadAll() {
+    if (!token) return;
+    setError(null);
+    try {
+      await loadCourses(token);
+      if (selectedCourseId) {
+        await loadContents(
+          token,
+          selectedCourseId,
+          filterCategory,
+          filterWeek ? parseInt(filterWeek, 10) : undefined
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reload.");
+    }
+  }
+
   useEffect(() => {
     if (!token) {
-      setCoursesLoading(false);
       setError("Not signed in.");
       return;
     }
-    let cancelled = false;
-    listCourses(token)
-      .then((data) => {
-        if (!cancelled) {
-          setCourses(data);
-          if (!selectedCourseId && data.length > 0 && !courseIdFromUrl) {
-            setSelectedCourseId(data[0].id);
-          }
-          if (courseIdFromUrl && data.some((c) => c.id === courseIdFromUrl)) {
-            setSelectedCourseId(courseIdFromUrl);
-          }
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load courses.");
-      })
-      .finally(() => {
-        if (!cancelled) setCoursesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    // load courses into global store (cache prevents extra reloads)
+    loadCourses(token);
   }, [token]);
 
-  const loadContents = useCallback(() => {
-    if (!token || !selectedCourseId) {
-      setContents([]);
-      return;
-    }
-    setContentsLoading(true);
-    setError(null);
-    const params: { category?: string; week?: number } = {};
-    if (filterCategory !== "all") params.category = filterCategory;
-    if (filterWeek) params.week = parseInt(filterWeek, 10);
-    listCourseContents(token, selectedCourseId, params)
-      .then(setContents)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load materials."))
-      .finally(() => setContentsLoading(false));
-  }, [token, selectedCourseId, filterCategory, filterWeek]);
+  // compute cache key and current contents from store
+  const contentsKey = `${selectedCourseId}|${filterCategory ?? "all"}|${filterWeek ?? ""}`;
+  const contents: CourseContent[] = contentsCache[contentsKey] ?? [];
 
   useEffect(() => {
-    loadContents();
-  }, [loadContents]);
+    if (!token || !selectedCourseId) return;
+    const weekNum = filterWeek ? parseInt(filterWeek, 10) : undefined;
+    // loadContents will return cached data if available
+    loadContents(token, selectedCourseId, filterCategory, weekNum);
+  }, [token, selectedCourseId, filterCategory, filterWeek, loadContents]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addStep, setAddStep] = useState<"upload-or-url" | "metadata">("upload-or-url");
@@ -223,7 +215,8 @@ export default function ContentPage() {
     try {
       await ingestCourseContent(token, body);
       closeAddMaterial();
-      loadContents();
+      // refresh current list (bypass cache by re-loading)
+      await loadContents(token, selectedCourseId, filterCategory, filterWeek ? parseInt(filterWeek, 10) : undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add material.");
     } finally {
@@ -232,6 +225,18 @@ export default function ContentPage() {
   }
 
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedContent, setSelectedContent] = useState<CourseContent | null>(null);
+
+  function openViewer(content: CourseContent) {
+    setSelectedContent(content);
+    setViewerOpen(true);
+  }
+
+  function closeViewer() {
+    setViewerOpen(false);
+    setSelectedContent(null);
+  }
 
   return (
     <div className="min-h-svh">
@@ -299,10 +304,10 @@ export default function ContentPage() {
               </div>
             )}
 
-            {/* When upload open: collapse list left, upload panel on right */}
+            {/* When upload or viewer open: collapse list left, panel on right */}
             <div
               className={
-                addOpen && role === "admin"
+                (addOpen && role === "admin") || viewerOpen
                   ? "grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,360px)_1fr] lg:gap-6"
                   : "space-y-4"
               }
@@ -310,7 +315,7 @@ export default function ContentPage() {
               {/* Materials list — collapsed width when upload is open */}
               <Card
                 className={
-                  addOpen && role === "admin"
+                  (addOpen && role === "admin") || viewerOpen
                     ? "overflow-hidden border border-border/80 bg-card/80 backdrop-blur-sm min-w-0 lg:max-w-[360px] lg:max-h-[calc(100vh-12rem)] lg:flex lg:flex-col"
                     : "overflow-hidden border border-border/80 bg-card/80 backdrop-blur-sm"
                 }
@@ -328,7 +333,7 @@ export default function ContentPage() {
                     )}
                   </CardTitle>
                   {selectedCourseId && (
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 flex-nowrap">
                       <select
                         className={selectClass + " w-auto min-w-[120px] text-xs py-1.5 h-8"}
                         value={filterCategory}
@@ -352,11 +357,33 @@ export default function ContentPage() {
                           </option>
                         ))}
                       </select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={reloadAll}
+                      className="gap-1 shrink-0"
+                      aria-label="Reload courses and contents"
+                      disabled={!token}
+                    >
+                      {contentsLoading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <>
+                          <RefreshCw className="size-4" />
+                        </>
+                      )}
+                    </Button>
                     </div>
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="relative space-y-3">
+              <CardContent
+                className={
+                  (addOpen && role === "admin") || viewerOpen
+                    ? "relative overflow-auto flex-1 min-h-0 space-y-3"
+                    : "relative space-y-3"
+                }
+              >
                 {!selectedCourseId ? (
                   <EmptyState
                     icon={BookOpen}
@@ -420,17 +447,17 @@ export default function ContentPage() {
                             </span>
                           )}
                           {m.file_url && (
-                            <Button
-                              asChild
-                              size="sm"
-                              variant="link"
-                              className="ml-auto h-auto gap-1 px-0 text-xs text-primary"
-                            >
-                              <a href={m.file_url} target="_blank" rel="noreferrer">
-                                <ExternalLink className="size-3.5" />
-                                Open file
-                              </a>
-                            </Button>
+                            <div className="ml-auto flex items-center gap-2">
+                              {/* Open file button removed */}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openViewer(m)}
+                                className="text-xs"
+                              >
+                                View
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </li>
@@ -442,10 +469,10 @@ export default function ContentPage() {
 
             {/* Add material — dashboard-style bordered card */}
             {addOpen && role === "admin" && (
-              <Card className="relative overflow-hidden border-2 border-primary/30 bg-gradient-to-br from-blue-500/5 via-cyan-500/5 to-primary/5 dark:from-blue-500/10 dark:via-cyan-500/10 dark:to-primary/10">
+              <Card className="relative overflow-hidden border-2 border-primary/30 bg-linear-to-br from-blue-500/5 via-cyan-500/5 to-primary/5 dark:from-blue-500/10 dark:via-cyan-500/10 dark:to-primary/10">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                   <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 p-2">
+                    <div className="rounded-lg bg-linear-to-br from-blue-500 to-cyan-400 p-2">
                       <Upload className="size-4 text-white" />
                     </div>
                     <div>
@@ -473,26 +500,34 @@ export default function ContentPage() {
                       </p>
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Upload file</Label>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Input
-                            type="file"
-                            accept=".pdf,.ppt,.pptx,.doc,.docx,.py,.js,.ts,.java,.png,.jpg,.jpeg,.txt,.md"
-                            onChange={(e) => setUploadFileInput(e.target.files?.[0] ?? null)}
-                            className="max-w-xs file:mr-2 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={!uploadFileInput || uploading}
-                            onClick={handleUploadThenMetadata}
-                          >
-                            {uploading ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                              "Upload & continue"
-                            )}
-                          </Button>
+                        <div className="flex w-full items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="relative">
+                              <div className="flex items-center gap-3 rounded-md border border-input bg-background px-3 py-2">
+                                <span className="text-sm font-medium text-muted-foreground">Choose file</span>
+                                <span className="truncate text-sm text-foreground">
+                                  {uploadFileInput?.name ?? "No file chosen"}
+                                </span>
+                              </div>
+                              <input
+                                type="file"
+                                accept=".pdf,.ppt,.pptx,.doc,.docx,.py,.js,.ts,.java,.png,.jpg,.jpeg,.txt,.md"
+                                onChange={(e) => setUploadFileInput(e.target.files?.[0] ?? null)}
+                                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer rounded-md"
+                              />
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={!uploadFileInput || uploading}
+                              onClick={handleUploadThenMetadata}
+                            >
+                              {uploading ? <Loader2 className="size-4 animate-spin" /> : "Upload & continue"}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                       <div className="relative flex items-center gap-2 py-2">
@@ -649,6 +684,44 @@ export default function ContentPage() {
                       </div>
                     </form>
                   )}
+                </CardContent>
+              </Card>
+            )}
+            {/* Content viewer panel — opens on the right and collapses course list */}
+            {viewerOpen && selectedContent && (
+              <Card className="overflow-hidden border border-border/80 bg-card/80 lg:max-h-[calc(100vh-12rem)]">
+                <CardHeader className="flex items-center justify-between pb-3">
+                  <CardTitle className="text-base font-semibold truncate">
+                    {selectedContent.title}
+                  </CardTitle>
+                  <Button variant="ghost" size="icon" onClick={closeViewer} aria-label="Close">
+                    <X className="size-4" />
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={selectedContent.category === "lab" ? "lab" : "theory"}>
+                        {selectedContent.category}
+                      </Badge>
+                      <Badge variant="outline">{CONTENT_TYPE_LABELS[selectedContent.content_type] ?? selectedContent.content_type}</Badge>
+                      {selectedContent.week != null && <Badge variant="secondary">Week {selectedContent.week}</Badge>}
+                    </div>
+                    {selectedContent.file_url ? (
+                      selectedContent.content_type === "pdf" || selectedContent.content_type === "slide" ? (
+                        <div className="h-[70vh]">
+                          <iframe src={selectedContent.file_url} className="w-full h-full border-0" title={selectedContent.title} />
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-sm text-muted-foreground">{selectedContent.title}</p>
+                      {/* Open file button removed */}
+                        </div>
+                      )
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No file URL available for this item.</p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )}

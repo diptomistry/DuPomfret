@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/lib/constants";
+import { BEARER_TOKEN_STORAGE_KEY } from "@/lib/constants";
 
 export type CourseComponent = "theory" | "lab";
 
@@ -44,6 +45,16 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
+function buildHeaders(): HeadersInit {
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (typeof window === "undefined") return headers;
+  const token = localStorage.getItem(BEARER_TOKEN_STORAGE_KEY);
+  if (token) {
+    (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export async function listMaterials(): Promise<CourseMaterial[]> {
   const res = await fetch(`${API_BASE_URL}/ingest/materials`, {
     next: { revalidate: 10 },
@@ -64,7 +75,7 @@ export async function uploadMaterial(
 export async function semanticSearch(query: string): Promise<SearchResult[]> {
   const res = await fetch(`${API_BASE_URL}/search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: buildHeaders(),
     body: JSON.stringify({ query }),
   });
   return handleResponse<SearchResult[]>(res);
@@ -73,7 +84,7 @@ export async function semanticSearch(query: string): Promise<SearchResult[]> {
 export async function ragQuery(query: string): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/rag/query`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: buildHeaders(),
     body: JSON.stringify({ query }),
   });
   const data = await handleResponse<{ answer: string }>(res);

@@ -2,10 +2,13 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
+from typing import Optional, List
 
 from app.core.auth import User, get_current_user
 from app.core.supabase import supabase
 from app.search.service import SearchService
+from app.vectorstore.repository import VectorRepository
+from app.utils.embeddings import get_text_embedding
 
 
 router = APIRouter(prefix="", tags=["search"])
@@ -93,4 +96,88 @@ async def list_namespaces(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list namespaces: {str(e)}",
+        )
+
+
+class SemanticSearchRequest(BaseModel):
+    query: str = Field(..., description="Text query to search course materials")
+    course_id: Optional[str] = Field(
+        default=None, description="Optional course UUID to scope search"
+    )
+    top_k: int = Field(8, ge=1, le=100, description="Number of results to return")
+
+
+class SemanticSearchResult(BaseModel):
+    id: str
+    score: float
+    snippet: str
+    source: str
+    component: str
+
+
+@router.post("/search", response_model=List[SemanticSearchResult])
+async def semantic_search(
+    request: SemanticSearchRequest = ...,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Top-level semantic search. If `course_id` is provided the search is scoped to that
+    course; otherwise the search runs across the current user's documents.
+    """
+    _ = current_user
+    repo = VectorRepository()
+
+    try:
+        # Embedding generation can fail due to provider errors/rate limits.
+        try:
+            query_embedding = get_text_embedding(request.query)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Embedding provider unavailable or rate-limited: {str(e)}",
+            )
+
+        if request.course_id:
+            raw = repo.similarity_search(
+                query_embedding=query_embedding,
+                namespace=request.course_id,
+                top_k=max(request.top_k * 4, request.top_k),
+            )
+        else:
+            # Search across user's documents
+            raw = repo.similarity_search_by_user(
+                query_embedding=query_embedding,
+                user_id=current_user.id,
+                top_k=max(request.top_k * 4, request.top_k),
+            )
+
+        results = []
+        for i, doc in enumerate(raw[: request.top_k]):
+            md = doc.get("metadata") or {}
+            content = doc.get("content", "") or ""
+            snippet = content if len(content) <= 500 else content[:500] + "..."
+            doc_id = (
+                doc.get("id")
+                or (f"{md.get('content_id','')}: {md.get('chunk_index','')}")
+                or str(i)
+            )
+            source = md.get("source") or doc.get("source") or md.get("content_type") or ""
+            component = md.get("category") or "theory"
+            score = float(doc.get("similarity") or 0.0)
+
+            results.append(
+                {
+                    "id": str(doc_id),
+                    "score": score,
+                    "snippet": snippet,
+                    "source": source,
+                    "component": component,
+                }
+            )
+
+        return results
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to perform semantic search: {str(e)}",
         )
