@@ -6,6 +6,7 @@ from typing import Optional
 
 from app.core.auth import User, get_current_user
 from app.rag.service import RAGService
+from pydantic import BaseModel, Field
 
 
 router = APIRouter(prefix="", tags=["rag"])
@@ -166,3 +167,4 @@ async def rag_query(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process RAG query: {str(e)}",
         )
+# Only course-scoped RAG API is exposed here.

@@ -9,6 +9,7 @@ from app.core.supabase import supabase
 from app.search.service import SearchService
 from app.vectorstore.repository import VectorRepository
 from app.utils.embeddings import get_text_embedding
+from pydantic import BaseModel, Field
 
 
 router = APIRouter(prefix="", tags=["search"])
@@ -181,3 +182,6 @@ async def semantic_search(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to perform semantic search: {str(e)}",
         )
+
+
+# (No top-level semantic search endpoint here — keep retrieval-only image search and namespace listing)

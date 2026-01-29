@@ -73,21 +73,52 @@ export async function uploadMaterial(
 }
 
 export async function semanticSearch(query: string): Promise<SearchResult[]> {
-  const res = await fetch(`${API_BASE_URL}/search`, {
+  return semanticSearchForCourse(query, undefined);
+}
+
+export async function semanticSearchForCourse(
+  query: string,
+  courseId?: string
+): Promise<SearchResult[]> {
+  const body: Record<string, unknown> = { query };
+  if (courseId) body.course_id = courseId;
+  const res = await fetch(`${API_BASE_URL}/courses/${courseId ?? ""}/search`, {
     method: "POST",
     headers: buildHeaders(),
-    body: JSON.stringify({ query }),
+    body: JSON.stringify(body),
   });
   return handleResponse<SearchResult[]>(res);
 }
 
 export async function ragQuery(query: string): Promise<string> {
-  const res = await fetch(`${API_BASE_URL}/rag/query`, {
-    method: "POST",
-    headers: buildHeaders(),
-    body: JSON.stringify({ query }),
-  });
-  const data = await handleResponse<{ answer: string }>(res);
+  return ragQueryForCourse(query, undefined);
+}
+
+export async function ragQueryForCourse(
+  query: string,
+  courseId?: string
+): Promise<string> {
+  // If courseId provided, call course-scoped endpoint; otherwise require top-level (not available)
+  if (!courseId) {
+    // Call the legacy top-level if available
+    const res = await fetch(`${API_BASE_URL}/rag/query`, {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({ query }),
+    });
+    const data = await handleResponse<{ answer: string }>(res);
+    return data.answer;
+  }
+
+  const res = await fetch(
+    `${API_BASE_URL}/courses/${courseId}/search`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({ query }),
+    }
+  );
+  const data = await handleResponse<{ answer: string; sources?: any[] }>(res);
   return data.answer;
 }
 

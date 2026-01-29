@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from app.core.supabase import supabase
 from app.utils.chunking import chunk_text
-from app.utils.embeddings import get_text_embeddings_batch, get_image_embedding
+from app.utils.embeddings_safe import get_text_embeddings_batch, get_image_embedding
 from app.utils.file_download import extract_text_from_file
 from app.vectorstore.repository import VectorRepository
 
