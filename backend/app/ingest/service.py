@@ -2,11 +2,20 @@
 
 from typing import Any, Dict, List, Optional
 
+import logging
+
 from app.core.supabase import supabase
 from app.utils.chunking import chunk_text
-from app.utils.embeddings import get_text_embeddings_batch, get_image_embedding
+from app.utils.embeddings import (
+    get_text_embeddings_batch,
+    get_image_embedding,
+    embedding_dimension,
+)
 from app.utils.file_download import extract_text_from_file
 from app.vectorstore.repository import VectorRepository
+
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionService:
@@ -103,11 +112,24 @@ class IngestionService:
             # For text-based content: extract text, chunk, and embed
             text = await extract_text_from_file(file_url)
             
-            chunks = chunk_text(text, chunk_size=1000, overlap=200)
+            # Keep chunks small enough for CLIP text encoder limits
+            chunks = chunk_text(text, chunk_size=350, overlap=50)
             if not chunks:
                 return {"chunks": 0, "content_id": str(content_id)}
 
-            embeddings = get_text_embeddings_batch(chunks)
+            try:
+                embeddings = get_text_embeddings_batch(chunks)
+            except Exception as e:
+                # If the embedding provider fails (e.g., CLIP token limit / model issues),
+                # fall back to zero vectors so that ingestion still succeeds and we can
+                # rely on metadata-based retrieval for grounding.
+                logger.warning(
+                    "get_text_embeddings_batch failed for %d chunks, falling back to zero embeddings: %s",
+                    len(chunks),
+                    str(e),
+                )
+                dim = embedding_dimension()
+                embeddings = [[0.0] * dim for _ in chunks]
 
             metadata_list: List[Dict[str, Any]] = []
             total = len(chunks)

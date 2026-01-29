@@ -174,11 +174,31 @@ class GenerateTheoryRequest(BaseModel):
         "exam-oriented",
         description="Depth/style of notes, e.g. 'exam-oriented', 'conceptual'",
     )
+    format: str = Field(
+        "notes",
+        description="Output format: 'notes', 'slides', or 'pdf'",
+    )
+    week: Optional[int] = Field(
+        None,
+        description="Optional week filter to ground retrieval (matches ingested content week)",
+    )
+    topic_filter: Optional[str] = Field(
+        None,
+        description="Optional exact topic filter to ground retrieval (matches ingested content topic)",
+    )
 
 
 class GenerateLabRequest(BaseModel):
     topic: str = Field(..., description="Lab topic, e.g. 'BST insertion'")
     language: str = Field(..., description="Programming language, e.g. 'python'")
+    week: Optional[int] = Field(
+        None,
+        description="Optional week filter to ground retrieval (matches ingested content week)",
+    )
+    topic_filter: Optional[str] = Field(
+        None,
+        description="Optional exact topic filter to ground retrieval (matches ingested content topic)",
+    )
 
 
 class GeneratedMaterialResponse(BaseModel):
@@ -189,6 +209,7 @@ class GeneratedMaterialResponse(BaseModel):
     output: str
     supported_languages: Optional[List[str]] = None
     grounding_score: Optional[float] = None
+    sources: Optional[List[dict]] = None
 
 
 @router.post(
@@ -207,6 +228,9 @@ async def generate_theory(
             course_id=course_id,
             topic=request.topic,
             depth=request.depth,
+            format=request.format,
+            week=request.week,
+            topic_filter=request.topic_filter,
             created_by=current_user.user_id,
         )
         return GeneratedMaterialResponse(
@@ -217,6 +241,7 @@ async def generate_theory(
             output=material["output"],
             supported_languages=material.get("supported_languages"),
             grounding_score=material.get("grounding_score"),
+            sources=material.get("sources"),
         )
     except Exception as e:
         raise HTTPException(
@@ -241,6 +266,8 @@ async def generate_lab(
             course_id=course_id,
             topic=request.topic,
             language=request.language,
+            week=request.week,
+            topic_filter=request.topic_filter,
             created_by=current_user.user_id,
         )
         return GeneratedMaterialResponse(
@@ -251,6 +278,7 @@ async def generate_lab(
             output=material["output"],
             supported_languages=material.get("supported_languages"),
             grounding_score=material.get("grounding_score"),
+            sources=material.get("sources"),
         )
     except Exception as e:
         raise HTTPException(
