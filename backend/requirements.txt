@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+supabase
+openai
+python-jose[cryptography]
+python-multipart
+PyPDF2
+python-docx
+httpx
+numpy
+replicate
+boto3

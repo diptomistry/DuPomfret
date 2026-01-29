@@ -4,9 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.ingest.router import router as ingest_router
 from app.rag.router import router as rag_router
 from app.search.router import router as search_router
-from app.maps.router import router as maps_router
 from app.media.router import router as media_router
 from app.storage.router import router as storage_router
+from app.courses.router import router as courses_router
+from app.materials.router import router as materials_router
+from app.chat.router import router as chat_router
 
 
 app = FastAPI(
@@ -15,6 +17,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, specify allowed origins
@@ -27,9 +30,11 @@ app.add_middleware(
 app.include_router(ingest_router)
 app.include_router(rag_router)
 app.include_router(search_router)
-app.include_router(maps_router)
 app.include_router(media_router)
 app.include_router(storage_router)
+app.include_router(courses_router)
+app.include_router(materials_router)
+app.include_router(chat_router)
 
 
 @app.get("/")
@@ -39,11 +44,20 @@ async def root():
         "message": "AI API Platform",
         "version": "1.0.0",
         "endpoints": {
-            "ingest": "/ingest",
-            "rag": "/rag/query",
-            "search_images": "/search/images",
-            "maps": "/maps",
-            "media": "/media/generate",
+            "admin_content_ingest": "/admin/content/ingest",
+            "admin_courses": "/admin/courses",
+            "courses": "/courses",
+            "course_detail": "/courses/{course_id}",
+            "course_contents": "/courses/{course_id}/contents",
+            "course_search": "/courses/{course_id}/search",
+            "course_image_search": "/courses/{course_id}/search/images",
+            "course_media_generate": "/courses/{course_id}/media/generate",
+            "course_generate_theory": "/courses/{course_id}/generate/theory",
+            "course_generate_lab": "/courses/{course_id}/generate/lab",
+            "material_validate": "/materials/{material_id}/validate",
+            "chat_session": "/chat/session",
+            "chat": "/chat/{session_id}",
+            "handwritten_ingest": "/courses/{course_id}/handwritten/ingest",
             "storage": "/storage/upload"
         }
     }
