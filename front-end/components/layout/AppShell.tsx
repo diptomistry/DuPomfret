@@ -14,6 +14,7 @@ import {
     ChevronLeft,
     ChevronRight,
     PenTool,
+    Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -59,6 +60,13 @@ const navItems = [
         href: ROUTES.DASHBOARD_NOTES,
         icon: PenTool,
         description: "Digitize handwritten notes",
+    },
+    {
+        label: "Community",
+        shortLabel: "Forum",
+        href: ROUTES.DASHBOARD_COMMUNITY,
+        icon: Users,
+        description: "Discuss with peers & AI bot",
     },
 ];
 
