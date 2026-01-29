@@ -3,6 +3,8 @@ export const ROUTES = {
   LOGIN: "/auth/login",
   CALLBACK: "/auth/callback",
   DASHBOARD: "/dashboard",
+  DASHBOARD_COURSES: "/dashboard/courses",
+  DASHBOARD_USERS: "/dashboard/users",
   DASHBOARD_CONTENT: "/dashboard/content",
   DASHBOARD_SEARCH: "/dashboard/search",
   DASHBOARD_GENERATE: "/dashboard/generate",

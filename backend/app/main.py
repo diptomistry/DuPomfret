@@ -1,6 +1,8 @@
 """FastAPI application entry point."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.admin.users_router import router as admin_users_router
+from app.auth.router import router as auth_router
 from app.ingest.router import router as ingest_router
 from app.rag.router import router as rag_router
 from app.search.router import router as search_router
@@ -27,6 +29,8 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth_router)
+app.include_router(admin_users_router)
 app.include_router(ingest_router)
 app.include_router(rag_router)
 app.include_router(search_router)
@@ -44,6 +48,11 @@ async def root():
         "message": "AI API Platform",
         "version": "1.0.0",
         "endpoints": {
+            "auth_login": "/auth/login",
+            "auth_refresh": "/auth/refresh",
+            "auth_me": "/auth/me",
+            "admin_users": "/admin/users",
+            "admin_user_role": "/admin/users/{user_id}/role",
             "admin_content_ingest": "/admin/content/ingest",
             "admin_courses": "/admin/courses",
             "courses": "/courses",

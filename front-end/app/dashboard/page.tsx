@@ -24,6 +24,7 @@ import {
     Lightbulb,
     Rocket,
 } from "lucide-react";
+import { BearerTokenDisplay } from "@/components/auth/BearerTokenDisplay";
 
 const features = [
     {
@@ -221,6 +222,9 @@ export default async function DashboardPage() {
                                 </div>
                             </CardContent>
                         </Card>
+
+                        {/* Bearer token (for debugging / API calls) */}
+                        <BearerTokenDisplay />
                     </div>
                 </div>
             </AppShell>

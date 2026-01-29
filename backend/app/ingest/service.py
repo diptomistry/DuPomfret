@@ -21,11 +21,12 @@ class IngestionService:
         category: str,
         content_type: str,
         file_url: str,
-        week: Optional[int],
-        topic: Optional[str],
-        tags: List[str],
-        language: Optional[str],
-        created_by: str,
+        title: Optional[str] = None,
+        week: Optional[int] = None,
+        topic: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        language: Optional[str] = None,
+        created_by: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Ingest a single course content file.
@@ -43,15 +44,16 @@ class IngestionService:
                 "content_type must be one of: 'slide', 'pdf', 'code', 'note', 'image'"
             )
 
+        tags = tags or []
         # 1) Insert CMS row
-        title = topic or "Course content"
+        display_title = title or topic or "Course content"
         resp = (
             supabase.table("course_contents")
             .insert(
                 {
                     "course_id": course_id,
                     "category": category,
-                    "title": title,
+                    "title": display_title,
                     "week": week,
                     "topic": topic,
                     "tags": tags,

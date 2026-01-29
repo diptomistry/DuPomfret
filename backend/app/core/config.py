@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
     supabase_jwt_secret: str
+    # Optional: use for auth helper APIs (login/refresh). If unset, service_role_key is used.
+    supabase_anon_key: Optional[str] = None
     
     # OpenAI
     openai_api_key: str

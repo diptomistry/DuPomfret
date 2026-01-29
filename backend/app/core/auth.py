@@ -4,10 +4,14 @@ Supports:
 - HS256 tokens signed with `SUPABASE_JWT_SECRET`
 - Asymmetric tokens (e.g. ES256) verified via Supabase JWKS:
   `https://<project>.supabase.co/auth/v1/jwks`
+
+Role is read from public.users (source of truth). Fallback: JWT app_metadata.role
+or user_metadata.role, then "student".
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Dict, Optional, Tuple
 
@@ -17,6 +21,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwk, jwt
 
 from app.core.config import settings
+from app.core.supabase import supabase
 
 
 security = HTTPBearer()
@@ -32,9 +37,15 @@ _JWKS_TTL_SECONDS = 60 * 60  # 1 hour
 
 class User:
     """User information extracted from JWT."""
-    def __init__(self, user_id: str, email: Optional[str] = None):
+    def __init__(
+        self,
+        user_id: str,
+        email: Optional[str] = None,
+        role: str = "student",
+    ):
         self.user_id = user_id
         self.email = email
+        self.role = role.lower() if role else "student"
 
 
 def _supabase_jwks_url() -> str:
@@ -145,20 +156,66 @@ async def get_current_user(
     try:
         payload = await _decode_supabase_jwt(token)
 
-        # Extract user_id (sub claim) and email
+        # Extract user_id (sub claim), email.
         user_id = payload.get("sub")
         email = payload.get("email")
-        
+
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token: missing user_id"
             )
-        
-        return User(user_id=user_id, email=email)
+
+        # Role: source of truth is public.users; fallback to JWT app_metadata/user_metadata, then "student".
+        role = await asyncio.to_thread(_get_role_from_public_users_sync, user_id)
+        if role is None:
+            app_meta = payload.get("app_metadata") or {}
+            user_meta = payload.get("user_metadata") or {}
+            role = (
+                app_meta.get("role")
+                or user_meta.get("role")
+                or "student"
+            )
+        if isinstance(role, str):
+            role = role.lower()
+        else:
+            role = "student"
+        if role not in ("admin", "student"):
+            role = "student"
+
+        return User(user_id=user_id, email=email, role=role)
 
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {str(e)}"
         )
+
+
+def _get_role_from_public_users_sync(user_id: str) -> Optional[str]:
+    """Read role from public.users (sync). Returns None if row missing or error."""
+    try:
+        resp = (
+            supabase.table("users")
+            .select("role")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if resp.data and len(resp.data) > 0:
+            role = (resp.data[0] or {}).get("role")
+            if isinstance(role, str) and role.strip():
+                return role.lower().strip()
+    except Exception:
+        pass
+    return None
+
+
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Require the current user to have the admin role."""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+    return current_user

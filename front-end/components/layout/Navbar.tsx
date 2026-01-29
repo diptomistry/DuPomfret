@@ -7,10 +7,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ROUTES } from "@/lib/constants";
-import { LogOut, LayoutDashboard, Sparkles } from "lucide-react";
+import { LogOut, LayoutDashboard, Sparkles, Users } from "lucide-react";
 
 export function Navbar() {
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+    const role = useAuthStore((s) => s.role);
     const { logout } = useAuth();
     const pathname = usePathname();
     const isDashboard = pathname?.startsWith("/dashboard");
@@ -64,6 +65,20 @@ export function Navbar() {
                                         <LayoutDashboard className="size-4" />
                                         <span className="hidden sm:inline font-medium">
                                             Home
+                                        </span>
+                                    </Link>
+                                </Button>
+                            )}
+                            {role === "admin" && (
+                                <Button
+                                    variant="ghost"
+                                    asChild
+                                    className="gap-2 h-9 sm:h-10 px-3 sm:px-4 text-sm"
+                                >
+                                    <Link href={ROUTES.DASHBOARD_USERS}>
+                                        <Users className="size-4" />
+                                        <span className="hidden sm:inline font-medium">
+                                            Users
                                         </span>
                                     </Link>
                                 </Button>

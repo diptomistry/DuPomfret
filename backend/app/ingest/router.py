@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.auth import User, get_current_user
+from app.core.auth import User, get_current_user, require_admin
 from app.ingest.service import IngestionService
 
 
@@ -22,6 +22,7 @@ class AdminContentIngestRequest(BaseModel):
         description="Underlying type: 'slide', 'pdf', 'code', 'note', or 'image'",
     )
     file_url: str = Field(..., description="Cloud storage URL (e.g. R2) of the content")
+    title: Optional[str] = Field(None, description="Display title for the material")
     week: Optional[int] = Field(None, description="Course week number")
     topic: Optional[str] = Field(None, description="Topic title, e.g. 'AVL Tree'")
     tags: Optional[List[str]] = Field(
@@ -47,14 +48,12 @@ class AdminContentIngestResponse(BaseModel):
 )
 async def ingest_course_content(
     request: AdminContentIngestRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
-    Ingest a single piece of course content into:
+    Ingest a single piece of course content (admin-only).
     - `course_contents` (CMS row)
     - `documents` (chunked + embedded, namespace = course_id)
-
-    This endpoint is intended for admin workflows.
     """
     service = IngestionService()
 
@@ -64,6 +63,7 @@ async def ingest_course_content(
             category=request.category,
             content_type=request.content_type,
             file_url=request.file_url,
+            title=request.title,
             week=request.week,
             topic=request.topic,
             tags=request.tags or [],
