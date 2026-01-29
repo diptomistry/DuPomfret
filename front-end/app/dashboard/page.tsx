@@ -1,6 +1,3 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getAuthDisplayName } from "@/lib/auth";
 import { Navbar } from "@/components/layout/Navbar";
 import { ROUTES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -13,16 +10,7 @@ import {
 } from "@/components/ui/card";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect(ROUTES.LOGIN);
-  }
-
-  const displayName = getAuthDisplayName(user);
+  const displayName = "Student";
 
   return (
     <div className="min-h-svh bg-background">

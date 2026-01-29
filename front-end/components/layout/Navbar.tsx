@@ -14,7 +14,7 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/70 backdrop-blur-xl supports-backdrop-filter:bg-background/50">
-      <div className="container flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
           href={ROUTES.HOME}
           className="flex items-center gap-2 text-sm font-semibold text-foreground hover:opacity-80 sm:text-base"

@@ -6,12 +6,21 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ROUTES } from "@/lib/constants";
 
+const USE_DEMO_AUTH =
+  process.env.NEXT_PUBLIC_USE_DEMO_AUTH === "true" ||
+  process.env.NEXT_PUBLIC_USE_DEMO_DATA === "true";
+
 export function useAuth() {
   const router = useRouter();
   const { setUser, logout: clearStore } = useAuthStore();
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(
+    () => (USE_DEMO_AUTH ? null : createClient()),
+    []
+  );
 
   useEffect(() => {
+    if (!supabase) return;
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -26,7 +35,9 @@ export function useAuth() {
   }, [supabase, setUser]);
 
   async function logout() {
-    await supabase.auth.signOut();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     clearStore();
     router.push(ROUTES.HOME);
     router.refresh();

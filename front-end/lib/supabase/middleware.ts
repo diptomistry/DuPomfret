@@ -2,7 +2,16 @@ import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { ROUTES } from "@/lib/constants";
 
+const USE_DEMO_AUTH =
+  process.env.NEXT_PUBLIC_USE_DEMO_AUTH === "true" ||
+  process.env.NEXT_PUBLIC_USE_DEMO_DATA === "true";
+
 export async function updateSession(request: NextRequest) {
+  // In demo mode we completely bypass Supabase auth & redirects.
+  if (USE_DEMO_AUTH) {
+    return NextResponse.next({ request });
+  }
+
   const path = request.nextUrl.pathname;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

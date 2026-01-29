@@ -1,6 +1,9 @@
 export const ROUTES = {
   HOME: "/",
-  LOGIN: "/auth/login",
+  // During the demo we bypass auth by sending all "login" navigation
+  // directly to the dashboard. To re-enable auth later, change this
+  // back to "/auth/login".
+  LOGIN: "/dashboard",
   CALLBACK: "/auth/callback",
   DASHBOARD: "/dashboard",
   DASHBOARD_CONTENT: "/dashboard/content",

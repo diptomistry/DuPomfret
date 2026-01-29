@@ -14,22 +14,30 @@ import { ArrowLeft } from "lucide-react";
 
 type SearchParams = { [k: string]: string | string[] | undefined };
 
+const USE_DEMO_AUTH =
+  process.env.NEXT_PUBLIC_USE_DEMO_AUTH === "true" ||
+  process.env.NEXT_PUBLIC_USE_DEMO_DATA === "true";
+
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let error: string | null = null;
 
-  if (user) {
-    redirect(ROUTES.DASHBOARD);
+  if (!USE_DEMO_AUTH) {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      redirect(ROUTES.DASHBOARD);
+    }
+
+    const params = await searchParams;
+    error = typeof params.error === "string" ? params.error : null;
   }
-
-  const params = await searchParams;
-  const error = typeof params.error === "string" ? params.error : null;
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-4 sm:p-6">
@@ -42,7 +50,9 @@ export default async function LoginPage({
               </Link>
             </Button>
             <CardTitle className="text-xl">
-              Sign in to your course workspace
+              {USE_DEMO_AUTH
+                ? "Continue to demo workspace"
+                : "Sign in to your course workspace"}
             </CardTitle>
           </div>
         </CardHeader>
