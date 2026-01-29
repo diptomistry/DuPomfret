@@ -14,7 +14,6 @@ export default async function HomePage() {
   if (user) {
     redirect(ROUTES.DASHBOARD);
   }
-
   return (
     <div className="min-h-svh bg-background">
       <Navbar />
