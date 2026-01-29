@@ -28,7 +28,7 @@ export function Logo({ width = 40, height = 40, className = "", alt = "Orion log
         alt={alt}
         width={width}
         height={height}
-        className="object-contain"
+        className="object-contain rounded-md"
         style={{ width, height }}
       />
     </div>
