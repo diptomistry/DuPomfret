@@ -114,6 +114,7 @@ class SemanticSearchResult(BaseModel):
     snippet: str
     source: str
     component: str
+    file_url: str | None = None
 
 
 @router.post("/search", response_model=List[SemanticSearchResult])
@@ -173,6 +174,8 @@ async def semantic_search(
                     "snippet": snippet,
                     "source": source,
                     "component": component,
+                    "file_url": doc.get("file_url") or md.get("file_url"),
+                    "url": doc.get("file_url") or md.get("file_url"),
                 }
             )
 
