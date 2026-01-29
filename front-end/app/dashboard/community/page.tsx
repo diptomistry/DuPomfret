@@ -389,6 +389,13 @@ export default function CommunityPage() {
         );
         const marginLeft = depth > 0 ? 16 : 0;
 
+        if (replies.length > 0) {
+            console.log(
+                `Comment ${comment.id} has ${replies.length} replies:`,
+                replies.map((r) => r.id),
+            );
+        }
+
         return (
             <div
                 key={comment.id}

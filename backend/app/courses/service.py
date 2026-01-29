@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.supabase import supabase
 from app.utils.embeddings import get_text_embedding
 from app.vectorstore.repository import VectorRepository
+from app.external.knowledge import ExternalKnowledgeService
 
 
 openai_client = openai.OpenAI(api_key=settings.openai_api_key)
@@ -26,6 +27,7 @@ class CourseService:
     def __init__(self) -> None:
         self.vector_repo = VectorRepository()
         self._replicate_client = replicate.Client(api_token=settings.replicate_api_token)
+        self.external_knowledge = ExternalKnowledgeService()
 
     # ----------------------
     # 1. Course management
@@ -296,14 +298,37 @@ class CourseService:
             raise ValueError(f"Invalid format: {format}. Must be one of: {sorted(allowed_formats)}")
 
         # Retrieve grounding context from uploaded materials
-        retrieved = self._retrieve_generation_context(
-            course_id=course_id,
-            query=f"{topic} {depth}",
-            category="theory",
-            week=week,
-            topic=topic_filter,
-            top_k=6,
-        )
+        retrieved: List[Dict[str, Any]] = []
+        try:
+            retrieved = self._retrieve_generation_context(
+                course_id=course_id,
+                query=f"{topic} {depth}",
+                category="theory",
+                week=week,
+                topic=topic_filter,
+                top_k=6,
+            )
+        except ValueError as e:
+            # No course grounding found - this is OK, we'll use external knowledge
+            logger.info(f"No course grounding for topic '{topic}': {str(e)}")
+            retrieved = []
+
+        # Fetch external knowledge when grounding is weak or missing
+        external_refs: List[Dict[str, Any]] = []
+        try:
+            score = self._grounding_score(retrieved)
+            if len(retrieved) < 3 or (score is not None and score < 0.55):
+                external_refs = await self.external_knowledge.enrich_topic(topic)
+        except Exception:
+            # Never fail generation because Wikipedia is unavailable
+            external_refs = []
+        
+        # If we have no course content AND no external knowledge, we can't generate
+        if not retrieved and not external_refs:
+            raise ValueError(
+                f"No course materials or external knowledge found for topic '{topic}'. "
+                "Please upload course materials or try a different topic."
+            )
 
         context_lines: List[str] = []
         for i, ch in enumerate(retrieved, start=1):
@@ -313,25 +338,60 @@ class CourseService:
             context_lines.append(f"[{label}]\n{snippet}")
         context_block = "\n\n".join(context_lines)
 
+        external_lines: List[str] = []
+        for i, ext in enumerate(external_refs, start=1):
+            label = f"E{i} (source={ext.get('source')}, title={ext.get('title')}, url={ext.get('url')})"
+            snippet = str(ext.get("extract") or "").strip()
+            if snippet:
+                external_lines.append(f"[{label}]\n{snippet}")
+        external_block = "\n\n".join(external_lines)
+
         format_instruction = {
             "notes": "Produce structured reading notes in Markdown (headings, bullets, short examples).",
             "slides": "Produce a slide outline: 8-14 slides. For each slide: a title + 3-6 bullets. Use Markdown.",
             "pdf": "Produce a handout-style document in Markdown suitable for conversion to PDF (sections, definitions, examples).",
         }[format]
 
+        # Adjust prompt based on what sources we have
+        if retrieved and external_refs:
+            grounding_instruction = (
+                "Grounding rules:\n"
+                "- PRIMARY: Use the course excerpts (S1, S2, ...) as the factual source.\n"
+                "- SECONDARY: If the course excerpts are incomplete, you MAY use external references (E1, E2, ...) to fill gaps.\n"
+                "- Always cite: [S#] for course excerpts, [E#] for external references.\n"
+            )
+            course_section = "=== COURSE EXCERPTS (PRIMARY) ===\n" + context_block + "\n"
+            external_section = "\n=== EXTERNAL REFERENCES (SECONDARY) ===\n" + external_block + "\n" if external_block else ""
+        elif retrieved:
+            grounding_instruction = (
+                "Grounding rules:\n"
+                "- Use ONLY the course excerpts (S1, S2, ...) as the factual source.\n"
+                "- If something isn't in the excerpts, say it's not covered in the provided materials.\n"
+                "- Always cite: [S#] for course excerpts.\n"
+            )
+            course_section = "=== COURSE EXCERPTS ===\n" + context_block + "\n"
+            external_section = ""
+        else:
+            # Only external knowledge available
+            grounding_instruction = (
+                "Grounding rules:\n"
+                "- Use the external references (E1, E2, ...) as the factual source.\n"
+                "- Note: This topic is not covered in course materials, so external knowledge is being used.\n"
+                "- Always cite: [E#] for external references.\n"
+            )
+            course_section = ""
+            external_section = "=== EXTERNAL REFERENCES ===\n" + external_block + "\n" if external_block else ""
+        
         prompt = (
-            "You are generating course learning material that MUST be grounded in the provided course excerpts.\n"
+            "You are generating course learning material.\n"
             f"Course ID: {course_id}\n"
             f"Topic: {topic}\n"
             f"Depth: {depth}\n"
             f"Format: {format}\n\n"
-            "Grounding rules:\n"
-            "- Use ONLY the provided excerpts as factual source.\n"
-            "- If something isn't in the excerpts, say it's not covered in the provided materials.\n"
-            "- Add inline citations like [S1], [S2] referencing the excerpt labels.\n\n"
+            f"{grounding_instruction}\n"
             f"{format_instruction}\n\n"
-            "Course excerpts:\n"
-            f"{context_block}\n"
+            f"{course_section}"
+            f"{external_section}"
         )
 
         completion = openai_client.chat.completions.create(
@@ -371,6 +431,18 @@ class CourseService:
         material = insert_resp.data[0]
         # Attach sources in response (not persisted)
         sources = self._format_sources(retrieved)
+        for ext in external_refs:
+            sources.append(
+                {
+                    "content": str(ext.get("extract") or ""),
+                    "metadata": {
+                        "type": "external",
+                        "source": str(ext.get("source") or "wikipedia"),
+                        "url": ext.get("url") or None,
+                        "title": ext.get("title") or None,
+                    },
+                }
+            )
         material["sources"] = sources
 
         # Optionally embed into documents for RAG
@@ -414,24 +486,49 @@ class CourseService:
                 f"Unsupported language: {language}. Supported: {', '.join(supported_languages)}"
             )
 
-        retrieved = self._retrieve_generation_context(
-            course_id=course_id,
-            query=f"{topic} implementation {language}",
-            category="lab",
-            week=week,
-            topic=topic_filter,
-            language=language,
-            top_k=6,
-        )
-        # If we don't have language-tagged lab content, fall back to any lab content.
-        if not retrieved:
+        # Retrieve grounding context from uploaded materials
+        retrieved: List[Dict[str, Any]] = []
+        try:
             retrieved = self._retrieve_generation_context(
                 course_id=course_id,
                 query=f"{topic} implementation {language}",
                 category="lab",
                 week=week,
                 topic=topic_filter,
+                language=language,
                 top_k=6,
+            )
+        except ValueError:
+            # No language-specific lab content found, try without language filter
+            try:
+                retrieved = self._retrieve_generation_context(
+                    course_id=course_id,
+                    query=f"{topic} implementation {language}",
+                    category="lab",
+                    week=week,
+                    topic=topic_filter,
+                    top_k=6,
+                )
+            except ValueError as e:
+                # No course grounding found - this is OK, we'll use external knowledge
+                logger.info(f"No course grounding for lab topic '{topic}': {str(e)}")
+                retrieved = []
+
+        # Optional external knowledge (SECONDARY) when grounding is weak.
+        # For labs, use external refs only for conceptual explanations, not for copying code.
+        external_refs: List[Dict[str, Any]] = []
+        try:
+            score = self._grounding_score(retrieved)
+            if len(retrieved) < 3 or (score is not None and score < 0.55):
+                external_refs = await self.external_knowledge.enrich_topic(topic)
+        except Exception:
+            external_refs = []
+        
+        # If we have no course content AND no external knowledge, we can't generate
+        if not retrieved and not external_refs:
+            raise ValueError(
+                f"No course materials or external knowledge found for lab topic '{topic}'. "
+                "Please upload course materials or try a different topic."
             )
 
         context_lines: List[str] = []
@@ -442,23 +539,60 @@ class CourseService:
             context_lines.append(f"[{label}]\n{snippet}")
         context_block = "\n\n".join(context_lines)
 
+        external_lines: List[str] = []
+        for i, ext in enumerate(external_refs, start=1):
+            label = f"E{i} (source={ext.get('source')}, title={ext.get('title')}, url={ext.get('url')})"
+            snippet = str(ext.get("extract") or "").strip()
+            if snippet:
+                external_lines.append(f"[{label}]\n{snippet}")
+        external_block = "\n\n".join(external_lines)
+
+        # Adjust prompt based on what sources we have
+        if retrieved and external_refs:
+            grounding_instruction = (
+                "Grounding rules:\n"
+                "- PRIMARY: Use the course excerpts (S1, S2, ...) as the factual/implementation reference.\n"
+                "- SECONDARY: If the excerpts are incomplete, you MAY use external references (E1, E2, ...) for definitions/high-level explanations.\n"
+                "- Do NOT copy external code verbatim; prioritize course patterns and write original code.\n"
+                "- Always cite: [S#] for course excerpts, [E#] for external references.\n"
+            )
+            course_section = "=== COURSE EXCERPTS (PRIMARY) ===\n" + context_block + "\n"
+            external_section = "\n=== EXTERNAL REFERENCES (SECONDARY) ===\n" + external_block + "\n" if external_block else ""
+        elif retrieved:
+            grounding_instruction = (
+                "Grounding rules:\n"
+                "- Use ONLY the course excerpts (S1, S2, ...) as the factual/implementation reference.\n"
+                "- If something isn't in the excerpts, say it's not covered.\n"
+                "- Always cite: [S#] for course excerpts.\n"
+            )
+            course_section = "=== COURSE EXCERPTS ===\n" + context_block + "\n"
+            external_section = ""
+        else:
+            # Only external knowledge available
+            grounding_instruction = (
+                "Grounding rules:\n"
+                "- Use the external references (E1, E2, ...) for conceptual explanations.\n"
+                "- Note: This topic is not covered in course materials, so external knowledge is being used.\n"
+                "- Write original code based on the concepts, do NOT copy code verbatim.\n"
+                "- Always cite: [E#] for external references.\n"
+            )
+            course_section = ""
+            external_section = "=== EXTERNAL REFERENCES ===\n" + external_block + "\n" if external_block else ""
+        
         prompt = (
-            "You are generating LAB learning material that MUST be grounded in the provided course excerpts.\n"
+            "You are generating LAB learning material.\n"
             f"Course ID: {course_id}\n"
             f"Topic: {topic}\n"
             f"Language: {language}\n\n"
-            "Grounding rules:\n"
-            "- Use ONLY the provided excerpts as factual/implementation reference.\n"
-            "- If something isn't in the excerpts, say it's not covered.\n"
-            "- Add inline citations like [S1], [S2] when referencing specifics.\n\n"
+            f"{grounding_instruction}\n"
             "Output requirements:\n"
             "- Short conceptual intro\n"
             "- Step-by-step algorithm explanation\n"
             "- Clean, commented code in the requested language\n"
             "- 1-2 small test cases\n"
             "- Ensure code is syntactically correct\n\n"
-            "Course excerpts:\n"
-            f"{context_block}\n"
+            f"{course_section}"
+            f"{external_section}"
         )
 
         completion = openai_client.chat.completions.create(
@@ -495,7 +629,20 @@ class CourseService:
             raise ValueError("Failed to store generated lab material")
 
         material = insert_resp.data[0]
-        material["sources"] = self._format_sources(retrieved)
+        sources = self._format_sources(retrieved)
+        for ext in external_refs:
+            sources.append(
+                {
+                    "content": str(ext.get("extract") or ""),
+                    "metadata": {
+                        "type": "external",
+                        "source": str(ext.get("source") or "wikipedia"),
+                        "url": ext.get("url") or None,
+                        "title": ext.get("title") or None,
+                    },
+                }
+            )
+        material["sources"] = sources
 
         try:
             embedding = get_text_embedding(output_text)
