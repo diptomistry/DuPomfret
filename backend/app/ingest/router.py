@@ -54,6 +54,8 @@ async def ingest_course_content(
     Ingest a single piece of course content (admin-only).
     - `course_contents` (CMS row)
     - `documents` (chunked + embedded, namespace = course_id)
+
+    Admin-only endpoint.
     """
     service = IngestionService()
 

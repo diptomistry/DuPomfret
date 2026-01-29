@@ -35,19 +35,10 @@ export function LandingHero() {
                 <div className="grid gap-8 lg:grid-cols-2 lg:gap-12 items-center">
                     {/* Left content */}
                     <div className="text-center lg:text-left">
-                        <Badge
-                            variant="primary"
-                            className="mb-6 px-4 py-1.5 text-sm font-medium shadow-lg shadow-primary/20"
-                        >
-                            <Sparkles className="mr-1.5 size-3.5" />
-                            AI-Powered Learning Platform
-                        </Badge>
-
                         <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl xl:text-7xl">
-                            Your{" "}
                             <span className="relative inline-block">
                                 <span className="bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
-                                    AI Course
+                                    Orion
                                 </span>
                                 <svg
                                     className="absolute -bottom-2 left-0 w-full hidden sm:block"
@@ -84,13 +75,10 @@ export function LandingHero() {
                                     </defs>
                                 </svg>
                             </span>
-                            <br />
-                            <span className="text-foreground">Companion</span>
                         </h1>
 
                         <p className="mx-auto lg:mx-0 mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl lg:text-2xl leading-relaxed">
-                            One place for your course slides, PDFs, lab code,
-                            and notes – with{" "}
+                            Your intelligent course companion with{" "}
                             <span className="font-semibold text-foreground">
                                 semantic search
                             </span>
@@ -112,38 +100,10 @@ export function LandingHero() {
                                 className="w-full sm:w-auto h-12 px-8 text-base font-semibold gap-2 shadow-xl shadow-primary/25 hover:shadow-primary/40 transition-all duration-300 hover:scale-105"
                             >
                                 <Link href={ROUTES.LOGIN}>
-                                    Get Started Free
+                                    Get Started
                                     <ArrowRight className="size-5" />
                                 </Link>
                             </Button>
-                            <Button
-                                variant="outline"
-                                asChild
-                                size="lg"
-                                className="w-full sm:w-auto h-12 px-8 text-base font-medium border-2 hover:bg-muted/50"
-                            >
-                                <Link href={ROUTES.DASHBOARD}>
-                                    Explore Dashboard
-                                </Link>
-                            </Button>
-                        </div>
-
-                        {/* Stats Bar */}
-                        <div className="mx-auto lg:mx-0 mt-12 grid max-w-lg grid-cols-2 gap-3 sm:grid-cols-4">
-                            {stats.map((stat) => (
-                                <div
-                                    key={stat.label}
-                                    className="flex flex-col items-center rounded-2xl border border-border/50 bg-card/50 p-3 backdrop-blur-sm transition-all duration-300 hover:bg-card/80 hover:border-primary/30"
-                                >
-                                    <stat.icon className="mb-2 size-5 text-primary" />
-                                    <span className="text-sm font-bold text-foreground">
-                                        {stat.value}
-                                    </span>
-                                    <span className="text-[10px] text-muted-foreground">
-                                        {stat.label}
-                                    </span>
-                                </div>
-                            ))}
                         </div>
                     </div>
 

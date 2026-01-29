@@ -36,16 +36,15 @@ _JWKS_TTL_SECONDS = 60 * 60  # 1 hour
 
 
 class User:
-    """User information extracted from JWT."""
-    def __init__(
-        self,
-        user_id: str,
-        email: Optional[str] = None,
-        role: str = "student",
-    ):
+    """User information extracted from JWT and database."""
+    def __init__(self, user_id: str, email: Optional[str] = None, role: Optional[str] = None):
         self.user_id = user_id
         self.email = email
-        self.role = role.lower() if role else "student"
+        self.role = role or "student"  # Default to student if not found
+    
+    def is_admin(self) -> bool:
+        """Check if user has admin role."""
+        return self.role == "admin"
 
 
 def _supabase_jwks_url() -> str:
@@ -141,12 +140,13 @@ async def get_current_user(
 ) -> User:
     """
     Validate JWT token from Authorization header and extract user info.
+    Fetches user role from the database.
     
     Args:
         credentials: HTTP Bearer token from Authorization header
         
     Returns:
-        User object with user_id and email
+        User object with user_id, email, and role
         
     Raises:
         HTTPException: If token is invalid or missing
@@ -165,24 +165,18 @@ async def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token: missing user_id"
             )
-
-        # Role: source of truth is public.users; fallback to JWT app_metadata/user_metadata, then "student".
-        role = await asyncio.to_thread(_get_role_from_public_users_sync, user_id)
-        if role is None:
-            app_meta = payload.get("app_metadata") or {}
-            user_meta = payload.get("user_metadata") or {}
-            role = (
-                app_meta.get("role")
-                or user_meta.get("role")
-                or "student"
-            )
-        if isinstance(role, str):
-            role = role.lower()
-        else:
-            role = "student"
-        if role not in ("admin", "student"):
-            role = "student"
-
+        
+        # Fetch user role from database
+        role = "student"  # Default role
+        try:
+            response = supabase.table("users").select("role").eq("id", user_id).single().execute()
+            if response.data:
+                role = response.data.get("role", "student")
+        except Exception:
+            # If user doesn't exist in users table yet, default to student
+            # The trigger should create it, but handle gracefully
+            pass
+        
         return User(user_id=user_id, email=email, role=role)
 
     except JWTError as e:
@@ -192,30 +186,24 @@ async def get_current_user(
         )
 
 
-def _get_role_from_public_users_sync(user_id: str) -> Optional[str]:
-    """Read role from public.users (sync). Returns None if row missing or error."""
-    try:
-        resp = (
-            supabase.table("users")
-            .select("role")
-            .eq("id", user_id)
-            .limit(1)
-            .execute()
-        )
-        if resp.data and len(resp.data) > 0:
-            role = (resp.data[0] or {}).get("role")
-            if isinstance(role, str) and role.strip():
-                return role.lower().strip()
-    except Exception:
-        pass
-    return None
-
-
-async def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Require the current user to have the admin role."""
-    if current_user.role != "admin":
+async def require_admin(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """
+    Dependency that requires the current user to be an admin.
+    
+    Args:
+        current_user: Current authenticated user
+        
+    Returns:
+        User object (guaranteed to be admin)
+        
+    Raises:
+        HTTPException: If user is not an admin
+    """
+    if not current_user.is_admin():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail="Admin access required"
         )
     return current_user

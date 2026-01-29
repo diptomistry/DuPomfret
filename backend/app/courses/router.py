@@ -42,7 +42,7 @@ async def create_course(
     current_user: User = Depends(require_admin),
 ):
     """
-    Create a new course (admin-only).
+    Create a new course (admin-only API).
     """
     service = CourseService()
     try:

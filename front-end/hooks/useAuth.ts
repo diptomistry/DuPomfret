@@ -4,17 +4,17 @@ import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/useAuthStore";
-import { ROUTES, API_BASE_URL } from "@/lib/constants";
-import type { UserRole } from "@/store/useAuthStore";
+import { ROUTES } from "@/lib/constants";
 
-async function fetchMeRole(accessToken: string): Promise<UserRole> {
-  const res = await fetch(`${API_BASE_URL}/auth/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) return "student";
-  const data = (await res.json()) as { role?: string };
-  const role = (data.role ?? "student").toLowerCase();
-  return role === "admin" ? "admin" : "student";
+const BEARER_TOKEN_KEY = "bearer_tokenBUET";
+
+function syncTokenToStorage(session: { access_token: string } | null) {
+  if (typeof window === "undefined") return;
+  if (session?.access_token) {
+    localStorage.setItem(BEARER_TOKEN_KEY, session.access_token);
+  } else {
+    localStorage.removeItem(BEARER_TOKEN_KEY);
+  }
 }
 
 export function useAuth() {
@@ -35,11 +35,13 @@ export function useAuth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      applySession(session ?? null);
+      setUser(session?.user ?? null, session ?? null);
+      syncTokenToStorage(session ?? null);
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      applySession(session ?? null);
+      setUser(session?.user ?? null, session ?? null);
+      syncTokenToStorage(session ?? null);
     });
 
     return () => subscription.unsubscribe();
@@ -47,6 +49,7 @@ export function useAuth() {
 
   async function logout() {
     await supabase.auth.signOut();
+    if (typeof window !== "undefined") localStorage.removeItem(BEARER_TOKEN_KEY);
     clearStore();
     router.push(ROUTES.HOME);
     router.refresh();

@@ -60,8 +60,10 @@ class Settings(BaseSettings):
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
     
-    # Google Maps API
-    google_maps_api_key: str
+    # Google Maps API (optional / currently unused)
+    # Made optional so the backend does not require this key when
+    # no Maps functionality is in use.
+    google_maps_api_key: Optional[str] = None
     
     # Replicate API
     replicate_api_token: str
