@@ -12,6 +12,7 @@ export const ROUTES = {
   DASHBOARD_CHAT: "/dashboard/chat",
   DASHBOARD_ASSISTANT: "/dashboard/assistant",
   DASHBOARD_NOTES: "/dashboard/notes",
+  DASHBOARD_COMMUNITY: "/dashboard/community",
 } as const;
 
 export const THEME_STORAGE_KEY = "theme";

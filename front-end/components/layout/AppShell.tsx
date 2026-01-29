@@ -14,6 +14,7 @@ import {
     ChevronLeft,
     ChevronRight,
     PenTool,
+    Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -40,13 +41,6 @@ const navItems = [
         description: "Create AI study materials",
     },
     {
-        label: "Validate",
-        shortLabel: "Check",
-        href: ROUTES.DASHBOARD_VALIDATE,
-        icon: CheckCircle,
-        description: "Validate code snippets",
-    },
-    {
         label: "Chat",
         shortLabel: "Ask",
         href: ROUTES.DASHBOARD_CHAT,
@@ -59,6 +53,13 @@ const navItems = [
         href: ROUTES.DASHBOARD_NOTES,
         icon: PenTool,
         description: "Digitize handwritten notes",
+    },
+    {
+        label: "Community",
+        shortLabel: "Forum",
+        href: ROUTES.DASHBOARD_COMMUNITY,
+        icon: Users,
+        description: "Discuss with peers & AI bot",
     },
 ];
 

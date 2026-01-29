@@ -333,6 +333,140 @@ using (
 );
 
 
+/* ===============================
+   10. COMMUNITY POSTS
+   =============================== */
+
+create table if not exists community_posts (
+    id uuid primary key default gen_random_uuid(),
+
+    -- author
+    author_id uuid not null references users(id) on delete cascade,
+
+    -- optionally link to a course/context
+    course_id uuid references courses(id) on delete set null,
+
+    -- core content
+    title text not null,
+    body text not null,
+
+    -- simple categorization
+    category text check (
+        category in ('question', 'discussion', 'announcement')
+    ),
+
+    -- visibility (could be extended later)
+    visibility text not null default 'course'
+        check (visibility in ('course', 'global')),
+
+    -- metadata
+    tags text[],
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+create index if not exists idx_community_posts_course
+on community_posts(course_id);
+
+create index if not exists idx_community_posts_author
+on community_posts(author_id);
+
+/* ===============================
+   11. COMMUNITY COMMENTS
+   =============================== */
+
+create table if not exists community_comments (
+    id uuid primary key default gen_random_uuid(),
+
+    post_id uuid not null references community_posts(id) on delete cascade,
+
+    -- optional parent for threaded replies
+    parent_comment_id uuid references community_comments(id) on delete cascade,
+
+    author_id uuid references users(id) on delete set null,
+
+    -- core text
+    body text not null,
+
+    -- identify bot vs human and intended receiver
+    is_bot boolean not null default false,
+    intended_receiver_id uuid references users(id) on delete set null,
+
+    -- helpful for your "bot replies when receiver unavailable" logic
+    is_auto_reply boolean not null default false,
+    auto_reply_reason text, -- e.g. 'receiver_offline', 'timeout'
+
+    -- grounding info for bot messages
+    grounding_metadata jsonb default '{}'::jsonb,
+
+    created_at timestamptz default now()
+);
+
+create index if not exists idx_community_comments_post
+on community_comments(post_id);
+
+create index if not exists idx_community_comments_parent
+on community_comments(parent_comment_id);
+
+create index if not exists idx_community_comments_intended_receiver
+on community_comments(intended_receiver_id);
+
+-- RLS policies for community
+alter table community_posts enable row level security;
+alter table community_comments enable row level security;
+
+-- Anyone can read posts and comments
+create policy "Read community posts"
+on community_posts for select
+using (true);
+
+create policy "Read community comments"
+on community_comments for select
+using (true);
+
+-- Authenticated users can create posts
+create policy "Create community posts"
+on community_posts for insert
+to authenticated
+with check (author_id = auth.uid());
+
+-- Users can update their own posts
+create policy "Update own posts"
+on community_posts for update
+using (author_id = auth.uid());
+
+-- Users can delete their own posts
+create policy "Delete own posts"
+on community_posts for delete
+using (author_id = auth.uid());
+
+-- Authenticated users and bot can create comments
+create policy "Create community comments"
+on community_comments for insert
+to authenticated
+with check (author_id = auth.uid() or is_bot = true);
+
+-- Users can update their own comments (bot comments cannot be edited)
+create policy "Update own comments"
+on community_comments for update
+using (author_id = auth.uid() and is_bot = false);
+
+-- Users can delete their own comments
+create policy "Delete own comments"
+on community_comments for delete
+using (author_id = auth.uid() and is_bot = false);
+
+-- Insert system bot user for AI-generated comments
+insert into users (id, display_name, role, created_at)
+values (
+    '00000000-0000-0000-0000-000000000001',
+    'AI Assistant',
+    'user',
+    now()
+)
+on conflict (id) do nothing;
+
+
 /* =========================================================
    IMPORTANT NOTES:
    - Existing `documents` table is NOT modified

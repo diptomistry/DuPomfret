@@ -12,6 +12,7 @@ from app.courses.router import router as courses_router
 from app.materials.router import router as materials_router
 from app.chat.router import router as chat_router
 from app.notes.router import router as notes_router
+from app.community.router import router as community_router
 
 
 app = FastAPI(
@@ -41,6 +42,7 @@ app.include_router(courses_router)
 app.include_router(materials_router)
 app.include_router(chat_router)
 app.include_router(notes_router)
+app.include_router(community_router)
 
 
 @app.get("/")
