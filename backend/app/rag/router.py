@@ -6,7 +6,7 @@ from typing import Optional
 
 from app.core.auth import User, get_current_user
 from app.rag.service import RAGService
-from pydantic import BaseModel, Field
+from app.rag.code_validation import CodeValidationService
 
 
 router = APIRouter(prefix="", tags=["rag"])
@@ -167,4 +167,47 @@ async def rag_query(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process RAG query: {str(e)}",
         )
-# Only course-scoped RAG API is exposed here.
+
+
+class CodeValidationRequest(BaseModel):
+    """Request body for standalone code validation."""
+
+    code: str = Field(..., description="Code snippet to validate")
+    language: str = Field(..., description="Programming language, e.g. 'python', 'java'")
+
+
+class CodeValidationResponse(BaseModel):
+    """Response for standalone code validation."""
+
+    is_valid: bool
+    diagnostics: list[str] = Field(default_factory=list)
+    tests_passed: Optional[bool] = None
+
+
+@router.post("/rag/validate-code", response_model=CodeValidationResponse)
+async def validate_code(
+    request: CodeValidationRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Validate an arbitrary lab code snippet.
+
+    - Performs lightweight syntax checks (Python AST) where possible
+    - Uses an LLM to assess language consistency and obvious logic issues
+    - Optionally reports whether simple test cases would likely pass
+    """
+    _ = current_user
+    service = CodeValidationService()
+
+    try:
+        result = await service.validate(code=request.code, language=request.language)
+        return CodeValidationResponse(
+            is_valid=bool(result.get("is_valid", False)),
+            diagnostics=list(result.get("diagnostics") or []),
+            tests_passed=result.get("tests_passed"),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate code: {str(e)}",
+        )
