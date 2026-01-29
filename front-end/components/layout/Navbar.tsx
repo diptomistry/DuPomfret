@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ROUTES } from "@/lib/constants";
 import { LogOut, LayoutDashboard, Sparkles, Users } from "lucide-react";
+import Logo from "./Logo";
 
 export function Navbar() {
   const user = useAuthStore((s) => s.user);
@@ -26,11 +27,10 @@ export function Navbar() {
       <div className="flex h-16 sm:h-18 items-center justify-between px-4 sm:px-6 md:px-8 lg:px-10 max-w-screen-2xl mx-auto w-full">
         <Link
           href={isAuthenticated ? ROUTES.DASHBOARD : ROUTES.HOME}
-          className="flex items-center gap-2.5 sm:gap-3 text-foreground transition-all duration-200 hover:opacity-90 group"
+          className="flex items-center gap-3 text-foreground transition-all duration-200 hover:opacity-90 group"
         >
-          <span className="relative inline-flex size-9 sm:size-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-purple-600 text-primary-foreground shadow-lg shadow-primary/25 transition-transform duration-200 group-hover:scale-105">
-            <Sparkles className="size-4 sm:size-5" />
-            <span className="absolute inset-0 rounded-xl bg-white/20 opacity-0 transition-opacity group-hover:opacity-100" />
+          <span className="relative inline-flex size-9 sm:size-10 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105">
+            <Logo width={40} height={40} />
           </span>
           <span className="text-base sm:text-lg font-bold tracking-tight">
             Orion

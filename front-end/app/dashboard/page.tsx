@@ -5,7 +5,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { AppShell } from "@/components/layout/AppShell";
 import { ROUTES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+ 
 import Link from "next/link";
 import {
     Card,
@@ -166,18 +166,12 @@ export default async function DashboardPage() {
                                     />
 
                                     <CardHeader className="relative pb-2 sm:pb-3">
-                                        <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-start gap-2">
                                             <div
                                                 className={`rounded-xl bg-linear-to-br ${feature.gradient} p-3 shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl`}
                                             >
                                                 <feature.icon className="size-5 text-white" />
                                             </div>
-                                            <Badge
-                                                variant={feature.badgeVariant}
-                                                className="font-semibold text-xs"
-                                            >
-                                                {feature.badge}
-                                            </Badge>
                                         </div>
                                         <CardTitle className="relative mt-4 text-lg sm:text-xl font-bold">
                                             {feature.title}

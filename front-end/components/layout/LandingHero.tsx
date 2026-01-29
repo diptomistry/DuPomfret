@@ -36,7 +36,10 @@ export function LandingHero() {
                     {/* Left content */}
                     <div className="text-center lg:text-left">
                         <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl xl:text-7xl">
-                            <span className="relative inline-block">
+                            <span className="relative inline-flex items-center gap-3">
+                                {/* logo */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src="/Gemini_Generated_Image_1n7zgl1n7zgl1n7z.png" alt="Orion" className="w-12 h-12 rounded-lg object-contain" />
                                 <span className="bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
                                     Orion
                                 </span>
@@ -111,7 +114,7 @@ export function LandingHero() {
                     <div className="flex items-center justify-center lg:justify-end">
                         <div className="relative">
                             {/* Glow effect behind animation */}
-                            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30 blur-3xl" />
+                            <div className="absolute inset-0 rounded-full bg-linear-to-br from-primary/30 to-purple-500/30 blur-3xl" />
                             <LottieAnimation
                                 animationData={chatbotAnimation}
                                 className="relative w-full max-w-md lg:max-w-lg"
