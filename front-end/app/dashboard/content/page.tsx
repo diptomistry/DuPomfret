@@ -46,7 +46,6 @@ import {
   ChevronRight,
   RefreshCw,
   Eye,
-  Columns,
 } from "lucide-react";
 
 const MATERIAL_TYPES = ["slide", "pdf", "code", "note", "image"] as const;
@@ -147,7 +146,6 @@ function ContentPageInner() {
   }, [token, selectedCourseId, filterCategory, filterWeek, loadContents]);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [splitPinned, setSplitPinned] = useState(false);
   const [addStep, setAddStep] = useState<"upload-or-url" | "metadata">(
     "upload-or-url",
   );
@@ -192,18 +190,38 @@ function ContentPageInner() {
     setError(null);
     const ext = uploadFileInput.name.split(".").pop()?.toLowerCase() ?? "";
     const fileTypeMap: Record<string, string> = {
+      // documents
       pdf: "pdf",
-      ppt: "slide",
-      pptx: "slide",
       doc: "note",
       docx: "note",
+      txt: "note",
+      md: "note",
+      // slides
+      ppt: "slide",
+      pptx: "slide",
+      odp: "slide",
+      // images
+      png: "image",
+      jpg: "image",
+      jpeg: "image",
+      gif: "image",
+      webp: "image",
+      // common code file extensions -> treat as code
       py: "code",
       js: "code",
       ts: "code",
       java: "code",
-      png: "image",
-      jpg: "image",
-      jpeg: "image",
+      c: "code",
+      cpp: "code",
+      h: "code",
+      cs: "code",
+      rb: "code",
+      go: "code",
+      rs: "code",
+      swift: "code",
+      kt: "code",
+      php: "code",
+      // fallback
     };
     const fileType = fileTypeMap[ext] ?? "pdf";
     try {
@@ -277,36 +295,52 @@ function ContentPageInner() {
       <AppShell>
         <div className="page-shell">
           <div className="page-stack">
-            {/* Header — one clean row: title left, toolbar right */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl flex items-center gap-2 min-w-0">
+            {/* Header — organized toolbar */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+              <div className="flex items-center gap-4 min-w-0">
                 <FolderOpen className="size-6 shrink-0 text-primary sm:size-7" />
-                <span className="truncate">Course Materials</span>
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                <Badge
-                  variant={role === "admin" ? "primary" : "default"}
-                  className="gap-1 shrink-0 text-xs"
-                >
-                  {role === "admin" ? (
-                    <Shield className="size-3" />
-                  ) : (
-                    <GraduationCap className="size-3" />
-                  )}
-                  {role === "admin" ? "Admin" : "Student"}
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  className="shrink-0"
-                >
+                <div className="min-w-0">
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl truncate">
+                    Course Materials
+                  </h1>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {selectedCourse ? `${selectedCourse.code} — ${selectedCourse.title}` : "Select a course"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button variant="outline" size="sm" asChild className="shrink-0">
                   <Link href={ROUTES.DASHBOARD_COURSES}>
                     <BookOpen className="size-4 mr-1" />
                     All courses
                   </Link>
                 </Button>
-                {/* Category & week filters moved to header for quick access */}
+
+                {/* course selector */}
+                {!coursesLoading ? (
+                  <select
+                    className={selectClass + " w-full min-w-0 sm:w-auto sm:min-w-[220px] shrink-0"}
+                    value={selectedCourseId}
+                    onChange={(e) => setSelectedCourseId(e.target.value)}
+                    disabled={!token || courses.length === 0}
+                    aria-label="Select course"
+                  >
+                    <option value="">Select course</option>
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} — {c.title}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm shrink-0">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading…
+                  </div>
+                )}
+
+                {/* Filters (visible on sm+) */}
                 {selectedCourseId && (
                   <div className="hidden sm:flex items-center gap-2">
                     <select
@@ -315,6 +349,7 @@ function ContentPageInner() {
                       onChange={(e) =>
                         setFilterCategory(e.target.value as "all" | "theory" | "lab")
                       }
+                      aria-label="Filter category"
                     >
                       <option value="all">All</option>
                       <option value="theory">Theory</option>
@@ -324,6 +359,7 @@ function ContentPageInner() {
                       className={selectClass + " w-auto min-w-[120px] text-xs py-1.5 h-8"}
                       value={filterWeek}
                       onChange={(e) => setFilterWeek(e.target.value)}
+                      aria-label="Filter week"
                     >
                       <option value="">All weeks</option>
                       {Array.from({ length: 14 }, (_, i) => i + 1).map((w) => (
@@ -334,58 +370,16 @@ function ContentPageInner() {
                     </select>
                   </div>
                 )}
-                {!coursesLoading && (
-                  <select
-                    className={
-                      selectClass +
-                      " w-full min-w-0 sm:w-auto sm:min-w-[200px] shrink-0"
-                    }
-                    value={selectedCourseId}
-                    onChange={(e) => setSelectedCourseId(e.target.value)}
-                    disabled={!token || courses.length === 0}
-                  >
-                    <option value="">Select course</option>
-                    {courses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.code} — {c.title}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {coursesLoading && (
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm shrink-0">
-                    <Loader2 className="size-4 animate-spin" />
-                    Loading…
-                  </div>
-                )}
-                {role === "admin" && selectedCourseId && (
+
+                {/* Actions */}
                   <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      onClick={openAddMaterial}
-                      className="gap-1 shrink-0"
-                    >
-                      <Upload className="size-4" />
-                      Add material
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={splitPinned ? "secondary" : "outline"}
-                      onClick={() => {
-                        setSplitPinned((s) => {
-                          const next = !s;
-                          if (next && selectedContent) setViewerOpen(true);
-                          return next;
-                        });
-                      }}
-                      className="gap-1 shrink-0"
-                      aria-pressed={splitPinned}
-                    >
-                      <Columns className="size-4" />
-                      <span className="hidden sm:inline">Split view</span>
-                    </Button>
+                    {role === "admin" && selectedCourseId && (
+                      <Button size="sm" onClick={openAddMaterial} className="gap-1 shrink-0">
+                        <Upload className="size-4" />
+                        Add material
+                      </Button>
+                    )}
                   </div>
-                )}
               </div>
             </div>
 
@@ -616,7 +610,7 @@ function ContentPageInner() {
                           <div className="flex flex-wrap items-center gap-2">
                             <Input
                               type="file"
-                              accept=".pdf,.ppt,.pptx,.doc,.docx,.py,.js,.ts,.java,.png,.jpg,.jpeg,.txt,.md"
+                              accept=".pdf,.ppt,.pptx,.odp,.doc,.docx,.txt,.md,.py,.js,.ts,.java,.c,.cpp,.h,.cs,.rb,.go,.rs,.swift,.kt,.php,.png,.jpg,.jpeg,.gif,.webp"
                               onChange={(e) =>
                                 setUploadFileInput(e.target.files?.[0] ?? null)
                               }

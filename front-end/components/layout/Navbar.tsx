@@ -13,12 +13,13 @@ export function Navbar() {
     const user = useAuthStore((s) => s.user);
     const session = useAuthStore((s) => s.session);
     const role = useAuthStore((s) => s.role);
+    const isReady = useAuthStore((s) => s.isReady);
     const { logout } = useAuth();
     const pathname = usePathname();
     const isDashboard = pathname?.startsWith("/dashboard");
-    
-    // Use actual user/session check instead of isAuthenticated flag
-    const isAuthenticated = !!user && !!session;
+
+    // Only consider authenticated once auth initialization has completed.
+    const isAuthenticated = isReady && !!user && !!session;
 
     return (
         <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/70 shadow-lg shadow-black/5 backdrop-blur-2xl dark:bg-background/60 dark:border-border/30 dark:shadow-black/20">
@@ -38,7 +39,7 @@ export function Navbar() {
 
                 <nav className="flex items-center gap-2 sm:gap-3">
                     <ThemeToggle />
-                    {isAuthenticated ? (
+                    {isReady ? (isAuthenticated ? (
                         <>
                             {!isDashboard && (
                                 <Button
@@ -96,6 +97,10 @@ export function Navbar() {
                             </Button>
                         </>
                     ) : (
+                        // Show a small placeholder while auth is being determined to avoid
+                        // flashing the "Sign In" button briefly.
+                        <div className="h-9 sm:h-10 w-24" />
+                    )) : (
                         <Button
                             asChild
                             className="h-9 sm:h-10 px-4 sm:px-6 font-semibold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all"
