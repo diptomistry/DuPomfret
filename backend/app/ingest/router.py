@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.auth import User, get_current_user
+from app.core.auth import User, get_current_user, require_admin
 from app.ingest.service import IngestionService
 
 
@@ -47,14 +47,14 @@ class AdminContentIngestResponse(BaseModel):
 )
 async def ingest_course_content(
     request: AdminContentIngestRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Ingest a single piece of course content into:
     - `course_contents` (CMS row)
     - `documents` (chunked + embedded, namespace = course_id)
 
-    This endpoint is intended for admin workflows.
+    Admin-only endpoint.
     """
     service = IngestionService()
 
