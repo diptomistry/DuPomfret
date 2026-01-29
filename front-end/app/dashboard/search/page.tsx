@@ -18,7 +18,7 @@ import {
 import { listCourses, type Course } from "@/lib/courses-api";
 import { BEARER_TOKEN_STORAGE_KEY } from "@/lib/constants";
 import { useEffect } from "react";
-import Combobox, { Option } from "@/components/ui/Combobox";
+import { Select } from "@/components/ui/select";
 import { Search, FileText, Sparkles, Loader2 } from "lucide-react";
 
 export default function SearchPage() {
@@ -26,6 +26,7 @@ export default function SearchPage() {
     const [courseId, setCourseId] = useState<string | undefined>(undefined);
     const [courses, setCourses] = useState<Course[]>([]);
     const [loadingCourses, setLoadingCourses] = useState(false);
+    const [coursesError, setCoursesError] = useState<string | null>(null);
 
     useEffect(() => {
         async function loadCourses() {
@@ -101,7 +102,7 @@ export default function SearchPage() {
                             </CardHeader>
                             <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-6 pt-0">
                                 <form
-                                    className="flex flex-col gap-2 sm:gap-3 sm:flex-row"
+                                    className="flex flex-col gap-2 sm:gap-3 sm:flex-row items-center"
                                     onSubmit={handleSearch}
                                 >
                                     <Input
@@ -115,19 +116,26 @@ export default function SearchPage() {
                                     />
                                     <div className="w-48">
                                         <label className="sr-only">Course</label>
-                                        <Combobox
-                                            options={[
-                                                { value: "", label: loadingCourses ? "Loading..." : "All courses" },
-                                                ...courses.map((c) => ({
-                                                    value: c.id,
-                                                    label: `${c.code} — ${c.title}`,
-                                                })),
-                                            ] as Option<Course>[]}
+                                        <Select
                                             value={courseId ?? ""}
-                                            onChange={(v) => setCourseId(v || undefined)}
+                                            onChange={(e) => setCourseId(e.target.value || undefined)}
                                             disabled={isSearching || loadingCourses}
-                                            placeholder="All courses"
-                                        />
+                                            className="h-10 text-base w-full"
+                                        >
+                                            <option value="">{loadingCourses ? "Loading..." : "All courses"}</option>
+                                            {courses.map((c) => (
+                                                <option key={c.id} value={c.id}>
+                                                    {c.code} — {c.title}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                        {coursesError && (
+                                            <div className="mt-1 text-xs text-destructive">
+                                                {coursesError === "Not signed in"
+                                                    ? "Sign in to see your courses"
+                                                    : coursesError}
+                                            </div>
+                                        )}
                                     </div>
                                     <Button
                                         type="submit"

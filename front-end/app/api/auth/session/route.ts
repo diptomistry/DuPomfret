@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
           id: session.user.id,
           email: session.user.email,
           user_metadata: session.user.user_metadata,
+          app_metadata: session.user.app_metadata,
         }
       : null,
     error: error?.message ?? null,
