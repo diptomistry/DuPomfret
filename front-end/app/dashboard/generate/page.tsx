@@ -180,6 +180,9 @@ export default function GeneratePage() {
         navigator.clipboard.writeText(text);
     }
 
+    const canGenerateMedia =
+        !!validation && validation.final_verdict === "ready_for_students";
+
     const TypeIcon = typeIcons[format] || FileText;
 
     return (
@@ -460,7 +463,9 @@ export default function GeneratePage() {
                                                     "content-to-video",
                                                 )
                                             }
-                                            disabled={isGeneratingMedia}
+                                            disabled={
+                                                isGeneratingMedia || !canGenerateMedia
+                                            }
                                         >
                                             <Video className="size-4 mr-2" />
                                             Video
@@ -474,7 +479,9 @@ export default function GeneratePage() {
                                                     "theory-diagram",
                                                 )
                                             }
-                                            disabled={isGeneratingMedia}
+                                            disabled={
+                                                isGeneratingMedia || !canGenerateMedia
+                                            }
                                         >
                                             <ImageIcon className="size-4 mr-2" />
                                             Diagram
@@ -559,21 +566,32 @@ export default function GeneratePage() {
                                         )}
 
                                     {validation && (
-                                        <div className="mt-4 grid gap-2 sm:grid-cols-4">
-                                            <Badge variant="outline">
-                                                Syntax: {validation.syntax}
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                Grounding:{" "}
-                                                {(validation.grounding_score * 100).toFixed(0)}%
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                Tests:{" "}
-                                                {validation.tests_passed ? "passed" : "failed"}
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                Verdict: {validation.final_verdict}
-                                            </Badge>
+                                        <div className="mt-4 space-y-2">
+                                            <div className="grid gap-2 sm:grid-cols-4">
+                                                <Badge variant="outline">
+                                                    Syntax: {validation.syntax}
+                                                </Badge>
+                                                <Badge variant="outline">
+                                                    Grounding:{" "}
+                                                    {(validation.grounding_score * 100).toFixed(0)}%
+                                                </Badge>
+                                                <Badge variant="outline">
+                                                    Tests:{" "}
+                                                    {validation.tests_passed ? "passed" : "failed"}
+                                                </Badge>
+                                                <Badge variant="outline">
+                                                    Verdict: {validation.final_verdict}
+                                                </Badge>
+                                            </div>
+                                            {!canGenerateMedia && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Run validation and wait for a{" "}
+                                                    <span className="font-medium">
+                                                        Verdict: ready_for_students
+                                                    </span>{" "}
+                                                    before generating diagrams or video.
+                                                </p>
+                                            )}
                                         </div>
                                     )}
 

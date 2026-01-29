@@ -168,6 +168,12 @@ export interface MaterialValidationResponse {
   final_verdict: string;
 }
 
+export interface CodeValidationApiResponse {
+  is_valid: boolean;
+  diagnostics?: string[];
+  tests_passed?: boolean | null;
+}
+
 // -------- File Upload --------
 
 export interface UploadResponse {
