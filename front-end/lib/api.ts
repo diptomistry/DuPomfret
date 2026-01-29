@@ -324,6 +324,43 @@ export async function ragQuery(query: string): Promise<string> {
   return result.answer;
 }
 
+// Course-scoped variants used by the search dashboard
+export async function semanticSearchForCourse(
+  query: string,
+  courseId?: string,
+): Promise<SearchResult[]> {
+  let targetCourseId = courseId;
+  if (!targetCourseId) {
+    const courses = await listCourses();
+    if (courses.length === 0) return [];
+    targetCourseId = courses[0].id;
+  }
+
+  const result = await searchCourse(targetCourseId, { query, top_k: 5 });
+  return result.sources.map((source, idx) => ({
+    id: `result-${idx}`,
+    score: 0.8, // Placeholder until backend returns per-source similarity
+    snippet: source.content.substring(0, 200),
+    source: source.metadata.source || "unknown",
+    component: (source.metadata.category as CourseComponent) || "theory",
+  }));
+}
+
+export async function ragQueryForCourse(
+  query: string,
+  courseId?: string,
+): Promise<string> {
+  let targetCourseId = courseId;
+  if (!targetCourseId) {
+    const courses = await listCourses();
+    if (courses.length === 0) return "No courses available.";
+    targetCourseId = courses[0].id;
+  }
+
+  const result = await searchCourse(targetCourseId, { query, top_k: 5 });
+  return result.answer;
+}
+
 export async function generateLearningMaterial(options: {
   topic: string;
   component: CourseComponent;

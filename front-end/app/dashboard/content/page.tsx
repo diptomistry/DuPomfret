@@ -22,11 +22,12 @@ import { useAuthStore } from "@/store/useAuthStore";
 import {
   ingestCourseContent,
   uploadFile,
+  listCourses,
+  listCourseContents,
   type Course,
   type CourseContent,
   type IngestRequest,
 } from "@/lib/courses-api";
-import { useCoursesStore } from "@/store/useCoursesStore";
 import { ROUTES } from "@/lib/constants";
 import {
   FileText,
@@ -86,24 +87,6 @@ function ContentPageInner() {
     }
   }, [courseIdFromUrl]);
 
-  async function reloadAll() {
-    if (!token) return;
-    setError(null);
-    try {
-      await loadCourses(token);
-      if (selectedCourseId) {
-        await loadContents(
-          token,
-          selectedCourseId,
-          filterCategory,
-          filterWeek ? parseInt(filterWeek, 10) : undefined
-        );
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reload.");
-    }
-  }
-
   useEffect(() => {
     if (!token) {
       setError("Not signed in.");
@@ -158,9 +141,7 @@ function ContentPageInner() {
 
   useEffect(() => {
     if (!token || !selectedCourseId) return;
-    const weekNum = filterWeek ? parseInt(filterWeek, 10) : undefined;
-    // loadContents will return cached data if available
-    loadContents(token, selectedCourseId, filterCategory, weekNum);
+    loadContents();
   }, [token, selectedCourseId, filterCategory, filterWeek, loadContents]);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -265,7 +246,7 @@ function ContentPageInner() {
       await ingestCourseContent(token, body);
       closeAddMaterial();
       // refresh current list (bypass cache by re-loading)
-      await loadContents(token, selectedCourseId, filterCategory, filterWeek ? parseInt(filterWeek, 10) : undefined);
+      await loadContents();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add material.");
     } finally {
