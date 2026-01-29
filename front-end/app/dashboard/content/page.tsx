@@ -45,6 +45,7 @@ import {
   X,
   ChevronRight,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 
 const MATERIAL_TYPES = ["slide", "pdf", "code", "note", "image"] as const;
@@ -189,18 +190,38 @@ function ContentPageInner() {
     setError(null);
     const ext = uploadFileInput.name.split(".").pop()?.toLowerCase() ?? "";
     const fileTypeMap: Record<string, string> = {
+      // documents
       pdf: "pdf",
-      ppt: "slide",
-      pptx: "slide",
       doc: "note",
       docx: "note",
+      txt: "note",
+      md: "note",
+      // slides
+      ppt: "slide",
+      pptx: "slide",
+      odp: "slide",
+      // images
+      png: "image",
+      jpg: "image",
+      jpeg: "image",
+      gif: "image",
+      webp: "image",
+      // common code file extensions -> treat as code
       py: "code",
       js: "code",
       ts: "code",
       java: "code",
-      png: "image",
-      jpg: "image",
-      jpeg: "image",
+      c: "code",
+      cpp: "code",
+      h: "code",
+      cs: "code",
+      rb: "code",
+      go: "code",
+      rs: "code",
+      swift: "code",
+      kt: "code",
+      php: "code",
+      // fallback
     };
     const fileType = fileTypeMap[ext] ?? "pdf";
     try {
@@ -274,44 +295,36 @@ function ContentPageInner() {
       <AppShell>
         <div className="page-shell">
           <div className="page-stack">
-            {/* Header — one clean row: title left, toolbar right */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-              <h1 className="text-xl font-bold tracking-tight sm:text-2xl flex items-center gap-2 min-w-0">
+            {/* Header — organized toolbar */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+              <div className="flex items-center gap-4 min-w-0">
                 <FolderOpen className="size-6 shrink-0 text-primary sm:size-7" />
-                <span className="truncate">Course Materials</span>
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                <Badge
-                  variant={role === "admin" ? "primary" : "default"}
-                  className="gap-1 shrink-0 text-xs"
-                >
-                  {role === "admin" ? (
-                    <Shield className="size-3" />
-                  ) : (
-                    <GraduationCap className="size-3" />
-                  )}
-                  {role === "admin" ? "Admin" : "Student"}
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  className="shrink-0"
-                >
+                <div className="min-w-0">
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl truncate">
+                    Course Materials
+                  </h1>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {selectedCourse ? `${selectedCourse.code} — ${selectedCourse.title}` : "Select a course"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button variant="outline" size="sm" asChild className="shrink-0">
                   <Link href={ROUTES.DASHBOARD_COURSES}>
                     <BookOpen className="size-4 mr-1" />
                     All courses
                   </Link>
                 </Button>
-                {!coursesLoading && (
+
+                {/* course selector */}
+                {!coursesLoading ? (
                   <select
-                    className={
-                      selectClass +
-                      " w-full min-w-0 sm:w-auto sm:min-w-[200px] shrink-0"
-                    }
+                    className={selectClass + " w-full min-w-0 sm:w-auto sm:min-w-[220px] shrink-0"}
                     value={selectedCourseId}
                     onChange={(e) => setSelectedCourseId(e.target.value)}
                     disabled={!token || courses.length === 0}
+                    aria-label="Select course"
                   >
                     <option value="">Select course</option>
                     {courses.map((c) => (
@@ -320,23 +333,53 @@ function ContentPageInner() {
                       </option>
                     ))}
                   </select>
-                )}
-                {coursesLoading && (
+                ) : (
                   <div className="flex items-center gap-2 text-muted-foreground text-sm shrink-0">
                     <Loader2 className="size-4 animate-spin" />
                     Loading…
                   </div>
                 )}
-                {role === "admin" && selectedCourseId && (
-                  <Button
-                    size="sm"
-                    onClick={openAddMaterial}
-                    className="gap-1 shrink-0"
-                  >
-                    <Upload className="size-4" />
-                    Add material
-                  </Button>
+
+                {/* Filters (visible on sm+) */}
+                {selectedCourseId && (
+                  <div className="hidden sm:flex items-center gap-2">
+                    <select
+                      className={selectClass + " w-auto min-w-[140px] text-xs py-1.5 h-8"}
+                      value={filterCategory}
+                      onChange={(e) =>
+                        setFilterCategory(e.target.value as "all" | "theory" | "lab")
+                      }
+                      aria-label="Filter category"
+                    >
+                      <option value="all">All</option>
+                      <option value="theory">Theory</option>
+                      <option value="lab">Lab</option>
+                    </select>
+                    <select
+                      className={selectClass + " w-auto min-w-[120px] text-xs py-1.5 h-8"}
+                      value={filterWeek}
+                      onChange={(e) => setFilterWeek(e.target.value)}
+                      aria-label="Filter week"
+                    >
+                      <option value="">All weeks</option>
+                      {Array.from({ length: 14 }, (_, i) => i + 1).map((w) => (
+                        <option key={w} value={String(w)}>
+                          Week {w}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
+
+                {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    {role === "admin" && selectedCourseId && (
+                      <Button size="sm" onClick={openAddMaterial} className="gap-1 shrink-0">
+                        <Upload className="size-4" />
+                        Add material
+                      </Button>
+                    )}
+                  </div>
               </div>
             </div>
 
@@ -375,43 +418,7 @@ function ContentPageInner() {
                         "Select a course above"
                       )}
                     </CardTitle>
-                    {selectedCourseId && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          className={
-                            selectClass +
-                            " w-auto min-w-[120px] text-xs py-1.5 h-8"
-                          }
-                          value={filterCategory}
-                          onChange={(e) =>
-                            setFilterCategory(
-                              e.target.value as "all" | "theory" | "lab",
-                            )
-                          }
-                        >
-                          <option value="all">All</option>
-                          <option value="theory">Theory</option>
-                          <option value="lab">Lab</option>
-                        </select>
-                        <select
-                          className={
-                            selectClass +
-                            " w-auto min-w-[100px] text-xs py-1.5 h-8"
-                          }
-                          value={filterWeek}
-                          onChange={(e) => setFilterWeek(e.target.value)}
-                        >
-                          <option value="">All weeks</option>
-                          {Array.from({ length: 14 }, (_, i) => i + 1).map(
-                            (w) => (
-                              <option key={w} value={String(w)}>
-                                Week {w}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                      </div>
-                    )}
+                    {/* Filters moved to the header for easier access */}
                   </div>
                 </CardHeader>
                 <CardContent className="relative space-y-3">
@@ -444,11 +451,9 @@ function ContentPageInner() {
                             <span className="font-medium text-sm text-foreground">
                               {m.title}
                             </span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
                               <Badge
-                                variant={
-                                  m.category === "lab" ? "lab" : "theory"
-                                }
+                                variant={m.category === "lab" ? "lab" : "theory"}
                               >
                                 {m.category}
                               </Badge>
@@ -464,6 +469,21 @@ function ContentPageInner() {
                                   <Calendar className="size-3" />
                                   Week {m.week}
                                 </Badge>
+                              )}
+                              {/* View button aligned with badges for consistent header placement */}
+                              {m.file_url && (
+                                <div className="ml-3 flex items-center">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openViewer(m)}
+                                    className="inline-flex items-center gap-2 text-xs h-8 px-3"
+                                    aria-label={`View ${m.title}`}
+                                  >
+                                    <Eye className="size-4" />
+                                    <span className="hidden sm:inline">View</span>
+                                  </Button>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -485,23 +505,7 @@ function ContentPageInner() {
                                 ))}
                               </span>
                             )}
-                            {m.file_url && (
-                              <Button
-                                asChild
-                                size="sm"
-                                variant="link"
-                                className="ml-auto h-auto gap-1 px-0 text-xs text-primary"
-                              >
-                                <a
-                                  href={m.file_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  <ExternalLink className="size-3.5" />
-                                  Open file
-                                </a>
-                              </Button>
-                            )}
+                            {/* file_url actions moved to the header badges area for consistent alignment */}
                           </div>
                         </li>
                       ))}
@@ -509,6 +513,56 @@ function ContentPageInner() {
                   )}
                 </CardContent>
               </Card>
+              {/* Viewer panel — opens on the right when an item is selected */}
+              {viewerOpen && selectedContent && (
+                <Card className="overflow-hidden border border-border/80 bg-card/80 lg:max-h-[calc(100vh-12rem)]">
+                  <CardHeader className="flex items-center justify-between pb-3">
+                    <CardTitle className="text-base font-semibold truncate">
+                      {selectedContent.title}
+                    </CardTitle>
+                  </CardHeader>
+                  {/* Close button absolutely positioned */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={closeViewer}
+                    aria-label="Close"
+                    className="absolute right-4 top-4 z-20"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={selectedContent.category === "lab" ? "lab" : "theory"}
+                        >
+                          {selectedContent.category}
+                        </Badge>
+                        <Badge variant="outline">
+                          {CONTENT_TYPE_LABELS[selectedContent.content_type] ?? selectedContent.content_type}
+                        </Badge>
+                        {selectedContent.week != null && (
+                          <Badge variant="secondary">Week {selectedContent.week}</Badge>
+                        )}
+                      </div>
+                      {selectedContent.file_url ? (
+                        selectedContent.content_type === "pdf" || selectedContent.content_type === "slide" ? (
+                          <div className="h-[70vh]">
+                            <iframe src={selectedContent.file_url} className="w-full h-full border-0" title={selectedContent.title} />
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm text-muted-foreground">{selectedContent.title}</p>
+                          </div>
+                        )
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No file URL available for this item.</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Add material — dashboard-style bordered card */}
               {addOpen && role === "admin" && (
@@ -556,7 +610,7 @@ function ContentPageInner() {
                           <div className="flex flex-wrap items-center gap-2">
                             <Input
                               type="file"
-                              accept=".pdf,.ppt,.pptx,.doc,.docx,.py,.js,.ts,.java,.png,.jpg,.jpeg,.txt,.md"
+                              accept=".pdf,.ppt,.pptx,.odp,.doc,.docx,.txt,.md,.py,.js,.ts,.java,.c,.cpp,.h,.cs,.rb,.go,.rs,.swift,.kt,.php,.png,.jpg,.jpeg,.gif,.webp"
                               onChange={(e) =>
                                 setUploadFileInput(e.target.files?.[0] ?? null)
                               }
