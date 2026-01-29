@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
+from typing import Literal, Optional
 
 from app.core.auth import User, get_current_user
 from app.chat.service import ChatService
@@ -71,6 +72,9 @@ class SourceResponse(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: list[SourceResponse] = []
+    mode: Literal["qa", "generate_theory", "generate_lab"] = "qa"
+    material_id: Optional[str] = None
+    validation: Optional[dict] = None
 
 
 @router.post("/chat/{session_id}", response_model=ChatResponse)
@@ -94,7 +98,7 @@ async def chat(
             user_id=current_user.user_id,
             message=request.message,
         )
-        
+
         # Format sources for response
         sources = []
         for src in result.get("sources", []):
@@ -110,8 +114,14 @@ async def chat(
                     language=metadata.get("language"),
                 )
             ))
-        
-        return ChatResponse(answer=result["answer"], sources=sources)
+
+        return ChatResponse(
+            answer=result["answer"],
+            sources=sources,
+            mode=result.get("mode", "qa"),
+            material_id=result.get("material_id"),
+            validation=result.get("validation"),
+        )
     except PermissionError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
