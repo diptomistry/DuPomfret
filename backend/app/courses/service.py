@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional
 import openai
 import replicate
 
+import logging
+import re
+
 from app.core.config import settings
 from app.core.supabase import supabase
 from app.utils.embeddings import get_text_embedding
@@ -14,6 +17,7 @@ from app.vectorstore.repository import VectorRepository
 
 
 openai_client = openai.OpenAI(api_key=settings.openai_api_key)
+logger = logging.getLogger(__name__)
 
 
 class CourseService:
@@ -88,20 +92,246 @@ class CourseService:
     # 3. AI generation (theory & lab)
     # ----------------------
 
+    def _retrieve_generation_context(
+        self,
+        course_id: str,
+        query: str,
+        *,
+        category: str | None = None,
+        topic: str | None = None,
+        week: int | None = None,
+        language: str | None = None,
+        top_k: int = 6,
+        include_generated: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve course-scoped chunks to ground generation.
+
+        Uses vector similarity over `documents` (namespace=course_id) and filters by metadata.
+        """
+        query_embedding = get_text_embedding(query)
+        raw_chunks = self.vector_repo.similarity_search(
+            query_embedding=query_embedding,
+            namespace=course_id,
+            top_k=max(top_k * 4, top_k),
+        )
+
+        non_image = [c for c in raw_chunks if c.get("type") != "image"]
+
+        def _matches_filters(chunk: Dict[str, Any]) -> bool:
+            # By default, do NOT ground generation in previously generated outputs.
+            # Otherwise, the model can end up self-referencing instead of using uploaded lectures.
+            if not include_generated:
+                src = (chunk.get("source") or "").lower()
+                if src in {"generated_material", "generated"}:
+                    return False
+                md0 = chunk.get("metadata") or {}
+                if isinstance(md0, dict):
+                    kind = str(md0.get("kind") or "").lower()
+                    if kind.startswith("generated_"):
+                        return False
+
+            md = chunk.get("metadata") or {}
+
+            # Category: case-insensitive exact match
+            if category:
+                md_category = str(md.get("category") or "").strip().lower()
+                if md_category != category.strip().lower():
+                    return False
+
+            # Topic: case-insensitive exact match on stored topic
+            if topic:
+                md_topic = md.get("topic")
+                if not isinstance(md_topic, str):
+                    return False
+                if md_topic.strip().lower() != topic.strip().lower():
+                    return False
+
+            # Week: handle json/int/string mismatches robustly
+            if week is not None:
+                md_week = md.get("week")
+                if md_week is None:
+                    return False
+                try:
+                    if int(md_week) != int(week):
+                        return False
+                except (TypeError, ValueError):
+                    return False
+
+            # Language: case-insensitive match when present
+            if language:
+                md_language = str(md.get("language") or "").strip().lower()
+                if md_language != language.strip().lower():
+                    return False
+
+            return True
+
+        filtered = [c for c in non_image if _matches_filters(c)]
+
+        # Fallback: if vector search returns nothing after filters, try a direct metadata query
+        # against the documents table for this course namespace. This ensures we still
+        # ground in the correct lecture/week even if the RPC or similarity search fails.
+        if not filtered:
+            try:
+                from app.core.supabase import supabase as _supabase
+
+                # Some deployments may store a different namespace while still
+                # tagging course_id inside metadata. Fall back to filtering by
+                # metadata->>course_id instead of namespace to avoid silent
+                # mismatches.
+                q = _supabase.table("documents").select("*").filter(
+                    "metadata->>course_id", "eq", course_id
+                )
+                if category:
+                    q = q.filter("metadata->>category", "eq", category)
+                if topic:
+                    q = q.filter("metadata->>topic", "eq", topic)
+                if week is not None:
+                    q = q.filter("metadata->>week", "eq", str(week))
+                if language:
+                    q = q.filter("metadata->>language", "eq", language)
+
+                resp = q.limit(max(top_k * 2, top_k)).execute()
+                docs = resp.data or []
+
+                fallback_chunks: List[Dict[str, Any]] = []
+                for d in docs:
+                    fallback_chunks.append(
+                        {
+                            "similarity": None,
+                            "content": d.get("content") or "",
+                            "metadata": d.get("metadata") or {},
+                            "type": d.get("type"),
+                            "source": d.get("source"),
+                            "file_url": d.get("file_url"),
+                        }
+                    )
+
+                if fallback_chunks:
+                    filtered = fallback_chunks
+            except Exception as e:
+                logger.warning("Fallback documents query for grounding failed: %s", str(e))
+
+        # Lightweight lexical rerank to reduce obviously-wrong grounding.
+        # (Vector similarity alone can be noisy for course PDFs.)
+        keywords = [
+            w
+            for w in re.findall(r"[a-z0-9]+", (query or "").lower())
+            if len(w) >= 3
+        ]
+
+        def _keyword_score(chunk: Dict[str, Any]) -> int:
+            md = chunk.get("metadata") or {}
+            topic_txt = str(md.get("topic") or "").lower() if isinstance(md, dict) else ""
+            title_txt = str(md.get("title") or "").lower() if isinstance(md, dict) else ""
+            content_txt = str(chunk.get("content") or "")[:800].lower()
+            hay = f"{topic_txt} {title_txt} {content_txt}"
+            return sum(1 for kw in keywords if kw and kw in hay)
+
+        filtered.sort(
+            key=lambda c: (
+                float(c.get("similarity", 0.0) or 0.0),
+                _keyword_score(c),
+            ),
+            reverse=True,
+        )
+
+        top = filtered[:top_k]
+        # If we have no lexical overlap at all and the caller didn't force filters,
+        # treat it as "not grounded enough" rather than hallucinating.
+        if keywords and week is None and topic is None:
+            best_overlap = max((_keyword_score(c) for c in top), default=0)
+            if best_overlap == 0:
+                raise ValueError(
+                    "No relevant grounded context found for this topic. "
+                    "Ensure the lecture/material covering it is uploaded+ingested, "
+                    "or pass week/topic_filter to constrain grounding."
+                )
+
+        return top
+
+    def _format_sources(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        sources: List[Dict[str, Any]] = []
+        for chunk in chunks:
+            sources.append(
+                {
+                    "content": chunk.get("content", ""),
+                    "metadata": {
+                        "type": chunk.get("type", "unknown"),
+                        "source": chunk.get("source", "unknown"),
+                        "url": chunk.get("file_url"),
+                        **((chunk.get("metadata") or {}) if isinstance(chunk.get("metadata"), dict) else {}),
+                    },
+                }
+            )
+        return sources
+
+    def _grounding_score(self, chunks: List[Dict[str, Any]]) -> float | None:
+        if not chunks:
+            return None
+        sims: List[float] = []
+        for c in chunks:
+            try:
+                sims.append(float(c.get("similarity", 0.0)))
+            except Exception:
+                continue
+        if not sims:
+            return None
+        # Similarity is already cosine-like in [0..1-ish]; clamp to [0,1]
+        avg = sum(sims) / len(sims)
+        return max(0.0, min(1.0, avg))
+
     async def generate_theory_material(
         self,
         course_id: str,
         topic: str,
         depth: str,
+        format: str,
+        week: int | None,
+        topic_filter: str | None,
         created_by: str,
     ) -> Dict[str, Any]:
+        allowed_formats = {"notes", "slides", "pdf"}
+        if format not in allowed_formats:
+            raise ValueError(f"Invalid format: {format}. Must be one of: {sorted(allowed_formats)}")
+
+        # Retrieve grounding context from uploaded materials
+        retrieved = self._retrieve_generation_context(
+            course_id=course_id,
+            query=f"{topic} {depth}",
+            category="theory",
+            week=week,
+            topic=topic_filter,
+            top_k=6,
+        )
+
+        context_lines: List[str] = []
+        for i, ch in enumerate(retrieved, start=1):
+            md = ch.get("metadata") or {}
+            label = f"S{i} (week={md.get('week')}, topic={md.get('topic')}, type={md.get('content_type')}, url={md.get('file_url')})"
+            snippet = (ch.get("content") or "").strip()
+            context_lines.append(f"[{label}]\n{snippet}")
+        context_block = "\n\n".join(context_lines)
+
+        format_instruction = {
+            "notes": "Produce structured reading notes in Markdown (headings, bullets, short examples).",
+            "slides": "Produce a slide outline: 8-14 slides. For each slide: a title + 3-6 bullets. Use Markdown.",
+            "pdf": "Produce a handout-style document in Markdown suitable for conversion to PDF (sections, definitions, examples).",
+        }[format]
+
         prompt = (
-            f"You are generating EXAM-ORIENTED theory notes for a university course.\n"
+            "You are generating course learning material that MUST be grounded in the provided course excerpts.\n"
             f"Course ID: {course_id}\n"
             f"Topic: {topic}\n"
-            f"Depth: {depth}\n\n"
-            "Write clear, concise, step-by-step notes suitable for Bangladeshi university exams. "
-            "Include definitions, key properties, and small worked examples if relevant."
+            f"Depth: {depth}\n"
+            f"Format: {format}\n\n"
+            "Grounding rules:\n"
+            "- Use ONLY the provided excerpts as factual source.\n"
+            "- If something isn't in the excerpts, say it's not covered in the provided materials.\n"
+            "- Add inline citations like [S1], [S2] referencing the excerpt labels.\n\n"
+            f"{format_instruction}\n\n"
+            "Course excerpts:\n"
+            f"{context_block}\n"
         )
 
         completion = openai_client.chat.completions.create(
@@ -109,7 +339,7 @@ class CourseService:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert CS teacher writing rigorous, exam-focused notes.",
+                    "content": "You are an expert CS teacher. Stay grounded in provided excerpts and cite them.",
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -119,6 +349,7 @@ class CourseService:
         output_text = completion.choices[0].message.content.strip()
 
         # Store in generated_materials
+        grounding_score = self._grounding_score(retrieved)
         insert_resp = (
             supabase.table("generated_materials")
             .insert(
@@ -128,7 +359,7 @@ class CourseService:
                     "prompt": prompt,
                     "output": output_text,
                     "supported_languages": ["en"],
-                    "grounding_score": None,
+                    "grounding_score": grounding_score,
                     "created_by": created_by,
                 }
             )
@@ -138,25 +369,33 @@ class CourseService:
             raise ValueError("Failed to store generated theory material")
 
         material = insert_resp.data[0]
+        # Attach sources in response (not persisted)
+        sources = self._format_sources(retrieved)
+        material["sources"] = sources
 
         # Optionally embed into documents for RAG
-        embedding = get_text_embedding(output_text)
-        metadata = {
-            "course_id": course_id,
-            "material_id": material["id"],
-            "category": "theory",
-            "topic": topic,
-            "kind": "generated_theory",
-        }
-        self.vector_repo.insert_documents(
-            contents=[output_text],
-            embeddings=[embedding],
-            metadata_list=[metadata],
-            types=["text"],
-            sources=["generated_material"],
-            file_urls=[None],
-            namespace=course_id,
-        )
+        try:
+            embedding = get_text_embedding(output_text)
+            metadata = {
+                "course_id": course_id,
+                "material_id": material["id"],
+                "category": "theory",
+                "topic": topic,
+                "kind": "generated_theory",
+                "format": format,
+            }
+            self.vector_repo.insert_documents(
+                contents=[output_text],
+                embeddings=[embedding],
+                metadata_list=[metadata],
+                types=["text"],
+                sources=["generated_material"],
+                file_urls=[None],
+                namespace=course_id,
+            )
+        except Exception as e:
+            # Do not fail the generation endpoint if embedding/indexing fails.
+            logger.warning("Failed to embed generated theory material into RAG: %s", str(e))
 
         return material
 
@@ -165,16 +404,61 @@ class CourseService:
         course_id: str,
         topic: str,
         language: str,
+        week: int | None,
+        topic_filter: str | None,
         created_by: str,
     ) -> Dict[str, Any]:
+        supported_languages = ["python", "java", "c++", "javascript", "go"]
+        if language.lower() not in {l.lower() for l in supported_languages}:
+            raise ValueError(
+                f"Unsupported language: {language}. Supported: {', '.join(supported_languages)}"
+            )
+
+        retrieved = self._retrieve_generation_context(
+            course_id=course_id,
+            query=f"{topic} implementation {language}",
+            category="lab",
+            week=week,
+            topic=topic_filter,
+            language=language,
+            top_k=6,
+        )
+        # If we don't have language-tagged lab content, fall back to any lab content.
+        if not retrieved:
+            retrieved = self._retrieve_generation_context(
+                course_id=course_id,
+                query=f"{topic} implementation {language}",
+                category="lab",
+                week=week,
+                topic=topic_filter,
+                top_k=6,
+            )
+
+        context_lines: List[str] = []
+        for i, ch in enumerate(retrieved, start=1):
+            md = ch.get("metadata") or {}
+            label = f"S{i} (lang={md.get('language')}, week={md.get('week')}, topic={md.get('topic')}, url={md.get('file_url')})"
+            snippet = (ch.get("content") or "").strip()
+            context_lines.append(f"[{label}]\n{snippet}")
+        context_block = "\n\n".join(context_lines)
+
         prompt = (
-            f"Generate a detailed lab-style explanation and {language} code for the topic:\n"
-            f"{topic}\n\n"
-            "Include:\n"
+            "You are generating LAB learning material that MUST be grounded in the provided course excerpts.\n"
+            f"Course ID: {course_id}\n"
+            f"Topic: {topic}\n"
+            f"Language: {language}\n\n"
+            "Grounding rules:\n"
+            "- Use ONLY the provided excerpts as factual/implementation reference.\n"
+            "- If something isn't in the excerpts, say it's not covered.\n"
+            "- Add inline citations like [S1], [S2] when referencing specifics.\n\n"
+            "Output requirements:\n"
             "- Short conceptual intro\n"
             "- Step-by-step algorithm explanation\n"
             "- Clean, commented code in the requested language\n"
-            "- 1-2 small test cases."
+            "- 1-2 small test cases\n"
+            "- Ensure code is syntactically correct\n\n"
+            "Course excerpts:\n"
+            f"{context_block}\n"
         )
 
         completion = openai_client.chat.completions.create(
@@ -182,7 +466,7 @@ class CourseService:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a lab instructor helping students understand and implement algorithms.",
+                    "content": "You are a lab instructor. Stay grounded in provided excerpts and cite them.",
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -191,6 +475,7 @@ class CourseService:
         )
         output_text = completion.choices[0].message.content.strip()
 
+        grounding_score = self._grounding_score(retrieved)
         insert_resp = (
             supabase.table("generated_materials")
             .insert(
@@ -199,8 +484,8 @@ class CourseService:
                     "category": "lab",
                     "prompt": prompt,
                     "output": output_text,
-                    "supported_languages": [language],
-                    "grounding_score": None,
+                    "supported_languages": supported_languages,
+                    "grounding_score": grounding_score,
                     "created_by": created_by,
                 }
             )
@@ -210,25 +495,29 @@ class CourseService:
             raise ValueError("Failed to store generated lab material")
 
         material = insert_resp.data[0]
+        material["sources"] = self._format_sources(retrieved)
 
-        embedding = get_text_embedding(output_text)
-        metadata = {
-            "course_id": course_id,
-            "material_id": material["id"],
-            "category": "lab",
-            "topic": topic,
-            "language": language,
-            "kind": "generated_lab",
-        }
-        self.vector_repo.insert_documents(
-            contents=[output_text],
-            embeddings=[embedding],
-            metadata_list=[metadata],
-            types=["text"],
-            sources=["generated_material"],
-            file_urls=[None],
-            namespace=course_id,
-        )
+        try:
+            embedding = get_text_embedding(output_text)
+            metadata = {
+                "course_id": course_id,
+                "material_id": material["id"],
+                "category": "lab",
+                "topic": topic,
+                "language": language,
+                "kind": "generated_lab",
+            }
+            self.vector_repo.insert_documents(
+                contents=[output_text],
+                embeddings=[embedding],
+                metadata_list=[metadata],
+                types=["text"],
+                sources=["generated_material"],
+                file_urls=[None],
+                namespace=course_id,
+            )
+        except Exception as e:
+            logger.warning("Failed to embed generated lab material into RAG: %s", str(e))
 
         return material
 
@@ -290,21 +579,24 @@ class CourseService:
         note = insert_resp.data[0]
 
         # 4) Embed into documents for RAG
-        embedding = get_text_embedding(latex_output or ocr_text)
-        metadata = {
-            "course_id": course_id,
-            "handwritten_note_id": note["id"],
-            "source": "handwritten",
-        }
-        self.vector_repo.insert_documents(
-            contents=[latex_output or ocr_text],
-            embeddings=[embedding],
-            metadata_list=[metadata],
-            types=["text"],
-            sources=["handwritten_note"],
-            file_urls=[image_url],
-            namespace=course_id,
-        )
+        try:
+            embedding = get_text_embedding(latex_output or ocr_text)
+            metadata = {
+                "course_id": course_id,
+                "handwritten_note_id": note["id"],
+                "source": "handwritten",
+            }
+            self.vector_repo.insert_documents(
+                contents=[latex_output or ocr_text],
+                embeddings=[embedding],
+                metadata_list=[metadata],
+                types=["text"],
+                sources=["handwritten_note"],
+                file_urls=[image_url],
+                namespace=course_id,
+            )
+        except Exception as e:
+            logger.warning("Failed to embed handwritten note into RAG: %s", str(e))
 
         return note
 

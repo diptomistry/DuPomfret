@@ -14,6 +14,22 @@ def embedding_dimension() -> int:
     return 768
 
 
+def _clip_safe_text(text: str, max_chars: int = 77) -> str:
+    """
+    CLIP text encoders typically have a small max token length (often 77 tokens).
+    Replicate CLIP models may error if the input is too long.
+
+    We defensively normalize whitespace and truncate by characters to keep inputs
+    within a safe range. Because each token is at least one character, capping
+    the character length at 77 guarantees we never exceed the model's 77-token
+    positional limit and avoids tensor shape mismatch errors.
+    """
+    normalized = " ".join((text or "").split())
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[:max_chars]
+
+
 def _validate_embedding(vec: List[float]) -> List[float]:
     expected = embedding_dimension()
     if len(vec) != expected:
@@ -48,7 +64,8 @@ def get_text_embedding(text: str) -> List[float]:
         List[float] embedding vector (typically 768-d)
     """
     client = _replicate_client()
-    output = client.run(settings.replicate_clip_embeddings_model, input={"text": text})
+    safe_text = _clip_safe_text(text)
+    output = client.run(settings.replicate_clip_embeddings_model, input={"text": safe_text})
     return _validate_embedding(_replicate_clip_embedding_from_output(output))
 
 

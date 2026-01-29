@@ -41,20 +41,49 @@ async function fetchUserRole(
 
 export function useAuth() {
   const router = useRouter();
-  const { setUser, setRole, logout: clearStore } = useAuthStore();
+  const { setUser, setRole, setReady, logout: clearStore } = useAuthStore();
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     // Initialize auth state immediately
     let mounted = true;
 
+    async function syncFromServerIfNeeded() {
+      // If server has a session (cookie-based) but browser storage doesn't,
+      // we can pull tokens from our own API route (which can read HttpOnly cookies)
+      // and set them into the browser supabase client (local storage).
+      try {
+        const res = await fetch("/api/auth/session", { method: "GET" });
+        const data = (await res.json()) as {
+          session: { access_token: string; refresh_token: string } | null;
+        };
+        if (!mounted) return;
+        if (data?.session?.access_token && data?.session?.refresh_token) {
+          await supabase.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     async function initializeAuth() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        const user = session?.user ?? null;
-        setUser(user, session ?? null);
+        // If browser doesn't see a session but server does, sync first.
+        if (!session) {
+          await syncFromServerIfNeeded();
+        }
+
+        const { data: { session: session2 } } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        const user = session2?.user ?? null;
+        setUser(user, session2 ?? null);
 
         if (user?.id) {
           const role = await fetchUserRole(supabase, user.id);
@@ -65,13 +94,15 @@ export function useAuth() {
           setRole("student");
         }
 
-        syncTokenToStorage(session ?? null);
+        syncTokenToStorage(session2 ?? null);
       } catch (err) {
         console.error("Failed to initialize auth:", err);
         if (mounted) {
           setUser(null, null);
           setRole("student");
         }
+      } finally {
+        if (mounted) setReady(true);
       }
     }
 
@@ -96,6 +127,7 @@ export function useAuth() {
       }
 
       syncTokenToStorage(session ?? null);
+      setReady(true);
     });
 
     return () => {
@@ -105,9 +137,23 @@ export function useAuth() {
   }, [supabase, setUser, setRole]);
 
   async function logout() {
-    await supabase.auth.signOut();
-    if (typeof window !== "undefined")
+    // Ask server to clear HttpOnly auth cookies (so SSR + middleware see logout).
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore - we'll still clear client state below
+    }
+
+    // Also clear the browser Supabase client session + localStorage token.
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
+    if (typeof window !== "undefined") {
       localStorage.removeItem(BEARER_TOKEN_STORAGE_KEY);
+    }
+
     clearStore();
     router.push(ROUTES.HOME);
     router.refresh();

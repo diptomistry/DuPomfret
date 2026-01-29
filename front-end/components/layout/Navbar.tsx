@@ -27,7 +27,7 @@ export function Navbar() {
                     href={isAuthenticated ? ROUTES.DASHBOARD : ROUTES.HOME}
                     className="flex items-center gap-2.5 sm:gap-3 text-foreground transition-all duration-200 hover:opacity-90 group"
                 >
-                    <span className="relative inline-flex size-9 sm:size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-purple-600 text-primary-foreground shadow-lg shadow-primary/25 transition-transform duration-200 group-hover:scale-105">
+                    <span className="relative inline-flex size-9 sm:size-10 items-center justify-center rounded-xl bg-linear-to-br from-primary to-purple-600 text-primary-foreground shadow-lg shadow-primary/25 transition-transform duration-200 group-hover:scale-105">
                         <Sparkles className="size-4 sm:size-5" />
                         <span className="absolute inset-0 rounded-xl bg-white/20 opacity-0 transition-opacity group-hover:opacity-100" />
                     </span>
