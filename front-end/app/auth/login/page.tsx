@@ -41,10 +41,16 @@ export default async function LoginPage({
                 <ArrowLeft className="size-4" data-slot="icon" />
               </Link>
             </Button>
-            <CardTitle className="text-xl">Sign in</CardTitle>
+            <CardTitle className="text-xl">
+              Sign in to your course workspace
+            </CardTitle>
           </div>
         </CardHeader>
         <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Access AI-augmented Theory and Lab materials, semantic search, and a
+            conversational tutor tailored to your enrolled course.
+          </p>
           {error ? (
             <p className="mb-4 text-sm text-destructive" role="alert">
               {error}
