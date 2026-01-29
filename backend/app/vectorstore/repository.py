@@ -101,7 +101,7 @@ class VectorRepository:
                         "type": doc["type"],
                         "source": doc["source"],
                         "file_url": doc.get("file_url"),
-                        "user_id": doc["metadata"].get("user_id") if isinstance(doc["metadata"], dict) else None
+                        "user_id": doc["metadata"].get("created_by") if isinstance(doc["metadata"], dict) else None
                     })
                 return results
         except Exception:
@@ -151,7 +151,7 @@ class VectorRepository:
                     "type": doc["type"],
                     "source": doc["source"],
                     "file_url": doc.get("file_url"),
-                    "user_id": doc["metadata"].get("user_id") if isinstance(doc["metadata"], dict) else None
+                    "user_id": doc["metadata"].get("created_by") if isinstance(doc["metadata"], dict) else None
                 })
         
         # Sort by similarity and return top_k
@@ -168,13 +168,13 @@ class VectorRepository:
         Similarity search across ALL namespaces, restricted to a specific user.
 
         This does not use the RPC helper because the function is namespace-based.
-        It instead filters by metadata->user_id in the documents table directly.
+        It instead filters by metadata->created_by in the documents table directly.
         """
         # Fetch a reasonable slice of this user's documents
         response = (
             supabase.table("documents")
             .select("*")
-            .contains("metadata", {"user_id": user_id})
+            .contains("metadata", {"created_by": user_id})
             .limit(1000)
             .execute()
         )
@@ -214,7 +214,7 @@ class VectorRepository:
                         "type": doc["type"],
                         "source": doc["source"],
                         "file_url": doc.get("file_url"),
-                        "user_id": doc["metadata"].get("user_id")
+                        "user_id": doc["metadata"].get("created_by")
                         if isinstance(doc["metadata"], dict)
                         else None,
                     }

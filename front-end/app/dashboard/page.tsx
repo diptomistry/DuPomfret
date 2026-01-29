@@ -24,6 +24,7 @@ import {
     Lightbulb,
     Rocket,
     Bot,
+    PenTool,
 } from "lucide-react";
 import { BearerTokenDisplay } from "@/components/auth/BearerTokenDisplay";
 
@@ -99,6 +100,18 @@ const features = [
         action: "Start Session",
         gradient: "from-violet-500 to-purple-400",
         shadowColor: "hover:shadow-violet-500/20",
+    },
+    {
+        title: "Handwritten Notes",
+        description:
+            "Digitize handwritten notes into beautifully formatted text with LaTeX support.",
+        href: ROUTES.DASHBOARD_NOTES,
+        icon: PenTool,
+        badge: "New",
+        badgeVariant: "primary" as const,
+        action: "Digitize Notes",
+        gradient: "from-indigo-500 to-blue-400",
+        shadowColor: "hover:shadow-indigo-500/20",
     },
 ];
 

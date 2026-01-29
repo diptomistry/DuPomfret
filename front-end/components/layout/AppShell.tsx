@@ -13,6 +13,7 @@ import {
     MessageCircle,
     ChevronLeft,
     ChevronRight,
+    PenTool,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -51,6 +52,13 @@ const navItems = [
         href: ROUTES.DASHBOARD_CHAT,
         icon: MessageCircle,
         description: "Chat with AI tutor",
+    },
+    {
+        label: "Notes",
+        shortLabel: "Notes",
+        href: ROUTES.DASHBOARD_NOTES,
+        icon: PenTool,
+        description: "Digitize handwritten notes",
     },
 ];
 

@@ -11,6 +11,7 @@ export const ROUTES = {
   DASHBOARD_VALIDATE: "/dashboard/validate",
   DASHBOARD_CHAT: "/dashboard/chat",
   DASHBOARD_ASSISTANT: "/dashboard/assistant",
+  DASHBOARD_NOTES: "/dashboard/notes",
 } as const;
 
 export const THEME_STORAGE_KEY = "theme";
