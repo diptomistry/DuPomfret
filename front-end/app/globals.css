@@ -35,9 +35,40 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+
+    /* Global glass-like gradient background */
+    background:
+      radial-gradient(circle at top left, oklch(0.98 0.06 260 / 0.9), transparent 55%),
+      radial-gradient(circle at bottom right, oklch(0.96 0.05 210 / 0.8), transparent 55%),
+      radial-gradient(circle at top right, oklch(0.96 0.06 300 / 0.7), transparent 55%),
+      var(--color-background);
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+}
+
+@layer components {
+  /* Reusable glass panel utility for sections and cards */
+  .glass-panel {
+    @apply border border-border/60 bg-card/70 backdrop-blur-xl shadow-lg shadow-black/5;
+  }
+
+  .glass-panel-soft {
+    @apply border border-border/40 bg-card/60 backdrop-blur-lg shadow-md shadow-black/10;
+  }
+
+  /* Improve responsive padding for main app containers */
+  .page-shell {
+    @apply container px-4 py-8 sm:px-6 lg:px-8;
+  }
+
+  .page-stack {
+    @apply mx-auto flex w-full max-w-5xl flex-col gap-6;
+  }
+
+  .page-grid-responsive {
+    @apply grid gap-4 sm:grid-cols-2 xl:grid-cols-3;
   }
 }

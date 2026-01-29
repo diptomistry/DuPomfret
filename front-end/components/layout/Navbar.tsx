@@ -13,15 +13,19 @@ export function Navbar() {
   const { logout } = useAuth();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center justify-between px-4 sm:px-6">
+    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/70 backdrop-blur-xl supports-backdrop-filter:bg-background/50">
+      <div className="container flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
           href={ROUTES.HOME}
-          className="font-semibold text-foreground hover:opacity-80"
+          className="flex items-center gap-2 text-sm font-semibold text-foreground hover:opacity-80 sm:text-base"
         >
-          App
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-card/80 text-xs shadow-sm backdrop-blur">
+            AI
+          </span>
+          <span className="hidden sm:inline">Course Companion</span>
+          <span className="sm:hidden">Companion</span>
         </Link>
-        <nav className="flex items-center gap-2">
+        <nav className="flex items-center gap-1 sm:gap-2">
           <ThemeToggle />
           {isAuthenticated ? (
             <>
