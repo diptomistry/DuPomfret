@@ -11,6 +11,7 @@ import os
 from typing import Optional, List
 from PyPDF2 import PdfReader
 from docx import Document
+from pptx import Presentation
 
 
 async def download_file(url: str) -> bytes:
@@ -72,6 +73,49 @@ def extract_text_from_ipynb(file_content: bytes) -> str:
     return "\n\n".join(parts)
 
 
+def extract_text_from_pptx(file_content: bytes) -> str:
+    """
+    Extract text from a .pptx PowerPoint file using python-pptx.
+    """
+    buf = io.BytesIO(file_content)
+    try:
+        prs = Presentation(buf)
+    except Exception:
+        return ""
+    parts: List[str] = []
+    for slide in prs.slides:
+        slide_text_parts: List[str] = []
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                text = shape.text or ""
+                if text.strip():
+                    slide_text_parts.append(text)
+        if slide_text_parts:
+            parts.append("\n".join(slide_text_parts))
+    return "\n\n".join(parts)
+
+
+def extract_pptx_slides(file_content: bytes) -> List[str]:
+    """
+    Return a list of slide texts for a .pptx file.
+    """
+    buf = io.BytesIO(file_content)
+    try:
+        prs = Presentation(buf)
+    except Exception:
+        return []
+    slides: List[str] = []
+    for slide in prs.slides:
+        slide_text_parts: List[str] = []
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                text = shape.text or ""
+                if text.strip():
+                    slide_text_parts.append(text)
+        slides.append("\n".join(slide_text_parts).strip())
+    return slides
+
+
 def extract_text_from_zip(file_content: bytes) -> str:
     """
     Iterate files inside a ZIP archive and concatenate supported file contents.
@@ -96,6 +140,8 @@ def extract_text_from_zip(file_content: bytes) -> str:
         ".txt",
         ".ipynb",
         ".docx",
+        ".pptx",
+        ".ppt",
         ".pdf",
     }
     zbuf = io.BytesIO(file_content)
@@ -114,6 +160,8 @@ def extract_text_from_zip(file_content: bytes) -> str:
                     parts.append(extract_text_from_pdf(data))
                 elif ext == ".docx":
                     parts.append(extract_text_from_docx(data))
+                elif ext == ".pptx":
+                    parts.append(extract_text_from_pptx(data))
                 elif ext == ".ipynb":
                     parts.append(extract_text_from_ipynb(data))
                 else:
@@ -143,6 +191,11 @@ async def extract_text_from_file(url: str) -> str:
         return extract_text_from_pdf(file_content)
     elif ext in (".docx", ".doc"):
         return extract_text_from_docx(file_content)
+    elif ext == ".pptx":
+        return extract_text_from_pptx(file_content)
+    elif ext == ".ppt":
+        # .ppt (legacy binary PowerPoint) is not directly supported. Recommend converting to .pptx.
+        raise ValueError("Unsupported legacy .ppt format. Please convert to .pptx and try again.")
     elif ext == ".txt":
         return extract_text_from_txt(file_content)
     elif ext == ".ipynb":
@@ -173,5 +226,5 @@ async def extract_text_from_file(url: str) -> str:
             # If URL has no extension, still attempt to decode as text
             return extract_text_from_txt(file_content)
         raise ValueError(
-            "Unsupported file format. Supported: PDF, DOCX, TXT, code files, .ipynb, .zip"
+            "Unsupported file format. Supported: PDF, DOCX, PPTX, TXT, code files, .ipynb, .zip"
         )

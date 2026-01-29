@@ -287,12 +287,52 @@ export default function NotesPage() {
         }
     };
 
+    const renderLatexToMarkdown = (latex?: string | null) => {
+        if (!latex) return "No LaTeX content";
+
+        let out = String(latex);
+
+        // If full document, extract between \begin{document} and \end{document}
+        const docMatch = out.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
+        if (docMatch && docMatch[1]) {
+            out = docMatch[1];
+        }
+
+        // Remove common preamble commands
+        out = out.replace(/\\documentclass\{[^\}]+\}/g, "");
+        out = out.replace(/\\usepackage(\[[^\]]*\])?\{[^\}]+\}/g, "");
+
+        // Convert sections to markdown headings
+        out = out.replace(/\\section\*?\{([^}]+)\}/g, "\n\n## $1\n\n");
+        out = out.replace(/\\subsection\*?\{([^}]+)\}/g, "\n\n### $1\n\n");
+
+        // Convert itemize/enumerate to simple lists
+        out = out.replace(/\\begin\{itemize\}/g, "");
+        out = out.replace(/\\end\{itemize\}/g, "");
+        out = out.replace(/\\begin\{enumerate\}/g, "");
+        out = out.replace(/\\end\{enumerate\}/g, "");
+        out = out.replace(/\\item\s*/g, "- ");
+
+        // Convert simple formatting
+        out = out.replace(/\\textbf\{([^}]+)\}/g, "**$1**");
+        out = out.replace(/\\emph\{([^}]+)\}/g, "*$1*");
+
+        // Normalize display math: convert \[ ... \] to $$ ... $$
+        out = out.replace(/\\\\\[/g, "$$"); // escaped in some outputs
+        out = out.replace(/\\\[/g, "$$");
+        out = out.replace(/\\\]/g, "$$");
+
+        // Trim and return
+        return out.trim();
+    };
+
     return (
-        <AppShell>
+        <>
             <Navbar />
-            <div className="container mx-auto px-4 py-8 max-w-7xl">
+            <AppShell>
+                <div className="container mx-auto px-4 py-8 max-w-7xl">
                 <div className="mb-8">
-                    <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+                    <h1 className="text-4xl font-bold mb-2 bg-linear-to-r from-primary to-purple-600 bg-clip-text text-transparent">
                         Handwritten Notes Digitization
                     </h1>
                     <p className="text-muted-foreground">
@@ -599,17 +639,39 @@ export default function NotesPage() {
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-muted p-6 rounded font-mono text-sm overflow-x-auto">
-                                    <pre className="whitespace-pre-wrap">
-                                        {selectedNote.latex_output ||
-                                            "No LaTeX content"}
-                                    </pre>
+                                <div className="bg-muted p-6 rounded max-w-none text-foreground">
+                                    <ReactMarkdown
+                                        remarkPlugins={[remarkGfm, remarkMath]}
+                                        rehypePlugins={[rehypeKatex]}
+                                        components={{
+                                            p: ({ node, ...props }) => (
+                                                <p className="text-foreground leading-relaxed" {...props} />
+                                            ),
+                                            li: ({ node, ...props }) => (
+                                                <li className="text-foreground ml-4 list-disc" {...props} />
+                                            ),
+                                            h2: ({ node, ...props }) => (
+                                                <h2 className="text-2xl font-semibold text-foreground mt-4 mb-2" {...props} />
+                                            ),
+                                            h3: ({ node, ...props }) => (
+                                                <h3 className="text-xl font-semibold text-foreground mt-3 mb-1" {...props} />
+                                            ),
+                                            pre: ({ node, ...props }) => (
+                                                <pre className="bg-muted/80 text-foreground p-3 rounded overflow-x-auto" {...props} />
+                                            ),
+                                        }}
+                                    >
+                                        {renderLatexToMarkdown(
+                                            selectedNote.latex_output,
+                                        )}
+                                    </ReactMarkdown>
                                 </div>
                             )}
                         </CardContent>
                     </Card>
                 )}
             </div>
-        </AppShell>
+            </AppShell>
+        </>
     );
 }

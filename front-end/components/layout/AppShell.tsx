@@ -74,8 +74,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     return (
         <aside
             className={cn(
-                "fixed left-0 top-16 sm:top-[4.5rem] z-40 hidden h-[calc(100svh-4rem)] sm:h-[calc(100svh-4.5rem)] flex-col border-r border-border/40 bg-background/80 backdrop-blur-2xl transition-all duration-300 ease-out md:flex dark:bg-background/60",
-                collapsed ? "w-[4.5rem]" : "w-56 lg:w-64",
+                "fixed left-0 top-16 sm:top-18 z-40 hidden h-[calc(100svh-4rem)] sm:h-[calc(100svh-4.5rem)] flex-col border-r border-border/30 bg-card/95 backdrop-blur-sm transition-all duration-300 ease-out md:flex dark:bg-background/85",
+                collapsed ? "w-18" : "w-56 lg:w-64",
             )}
         >
             <nav className="flex-1 space-y-1 p-3">
@@ -86,10 +86,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                             key={item.href}
                             href={item.href}
                             className={cn(
-                                "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                                "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150",
                                 isActive
-                                    ? "bg-primary/15 text-primary shadow-sm"
-                                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                                    ? "bg-primary/10 text-primary shadow-sm"
+                                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                             )}
                             title={collapsed ? item.label : undefined}
                         >
@@ -184,7 +184,7 @@ export function AppShell({ children }: AppShellProps) {
             <main
                 className={cn(
                     "min-h-[calc(100svh-4rem)] sm:min-h-[calc(100svh-4.5rem)] pb-16 transition-all duration-300 ease-out md:pb-0",
-                    sidebarCollapsed ? "md:pl-[4.5rem]" : "md:pl-56 lg:pl-64",
+                    sidebarCollapsed ? "md:pl-18" : "md:pl-56 lg:pl-64",
                 )}
             >
                 {children}

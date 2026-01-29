@@ -26,7 +26,6 @@ import {
     Bot,
     PenTool,
 } from "lucide-react";
-import { BearerTokenDisplay } from "@/components/auth/BearerTokenDisplay";
 
 const features = [
     {
@@ -137,7 +136,7 @@ export default async function DashboardPage() {
                         <div className="space-y-2">
                             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
                                 Welcome back,{" "}
-                                <span className="bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                                <span className="bg-linear-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
                                     {displayName || "Student"}
                                 </span>{" "}
                                 👋
@@ -171,18 +170,18 @@ export default async function DashboardPage() {
                                 >
                                     {/* Subtle gradient overlay on hover */}
                                     <div
-                                        className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 transition-opacity duration-300 group-hover:opacity-5 dark:group-hover:opacity-10`}
+                                        className={`absolute inset-0 bg-linear-to-br ${feature.gradient} opacity-0 transition-opacity duration-300 group-hover:opacity-5 dark:group-hover:opacity-10`}
                                     />
 
                                     {/* Animated border glow */}
                                     <div
-                                        className={`absolute inset-0 rounded-xl bg-gradient-to-br ${feature.gradient} opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-20`}
+                                        className={`absolute inset-0 rounded-xl bg-linear-to-br ${feature.gradient} opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-20`}
                                     />
 
                                     <CardHeader className="relative pb-2 sm:pb-3">
                                         <div className="flex items-start justify-between gap-2">
                                             <div
-                                                className={`rounded-xl bg-gradient-to-br ${feature.gradient} p-3 shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl`}
+                                                className={`rounded-xl bg-linear-to-br ${feature.gradient} p-3 shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl`}
                                             >
                                                 <feature.icon className="size-5 text-white" />
                                             </div>
@@ -204,7 +203,7 @@ export default async function DashboardPage() {
                                         <Button
                                             asChild
                                             size="sm"
-                                            className={`w-full bg-gradient-to-r ${feature.gradient} text-white shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-[1.02]`}
+                                            className={`w-full bg-linear-to-r ${feature.gradient} text-white shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-[1.02]`}
                                         >
                                             <Link href={feature.href}>
                                                 {feature.action}
@@ -217,10 +216,10 @@ export default async function DashboardPage() {
                         </div>
 
                         {/* Tips Section */}
-                        <Card className="relative overflow-hidden border-2 border-dashed border-primary/30 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-yellow-500/5 dark:from-amber-500/10 dark:via-orange-500/10 dark:to-yellow-500/10">
-                            <div className="absolute -top-20 -right-20 size-40 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 blur-3xl" />
+                        <Card className="relative overflow-hidden border-2 border-dashed border-primary/30 bg-linear-to-br from-amber-500/5 via-orange-500/5 to-yellow-500/5 dark:from-amber-500/10 dark:via-orange-500/10 dark:to-yellow-500/10">
+                            <div className="absolute -top-20 -right-20 size-40 rounded-full bg-linear-to-br from-amber-500/20 to-orange-500/20 blur-3xl" />
                             <CardContent className="relative flex flex-col sm:flex-row items-center gap-6 py-8 sm:py-10">
-                                <div className="flex-shrink-0 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 p-4 shadow-xl shadow-amber-500/25">
+                                <div className="shrink-0 rounded-2xl bg-linear-to-br from-amber-500 to-orange-500 p-4 shadow-xl shadow-amber-500/25">
                                     <Lightbulb className="size-8 text-white" />
                                 </div>
                                 <div className="text-center sm:text-left">
@@ -248,8 +247,7 @@ export default async function DashboardPage() {
                             </CardContent>
                         </Card>
 
-                        {/* Bearer token (for debugging / API calls) */}
-                        <BearerTokenDisplay />
+                        {/* Removed bearer token display for security */}
                     </div>
                 </div>
             </AppShell>

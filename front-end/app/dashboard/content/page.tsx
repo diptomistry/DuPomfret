@@ -286,6 +286,8 @@ function ContentPageInner() {
   const [codeText, setCodeText] = useState<string | null>(null);
   const [codeLoading, setCodeLoading] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [slides, setSlides] = useState<string[] | null>(null);
+  const [slideIndex, setSlideIndex] = useState(0);
 
   function openViewer(content: CourseContent) {
     setSelectedContent(content);
@@ -333,7 +335,35 @@ function ContentPageInner() {
         if (!cancelled) setCodeLoading(false);
       }
     }
-    loadCode();
+    async function loadSlidesIfNeeded() {
+      setSlides(null);
+      setSlideIndex(0);
+      if (!selectedContent || !selectedContent.file_url) return;
+      const urlLower = (selectedContent.file_url || "").toLowerCase();
+      if (selectedContent.content_type === "slide" || urlLower.endsWith(".pptx")) {
+        try {
+          setCodeLoading(true);
+          const res = await fetch(`/api/storage/fetch_text?file_url=${encodeURIComponent(selectedContent.file_url)}`, {
+            headers: { Authorization: `Bearer ${session?.access_token}` },
+          });
+          if (!res.ok) throw new Error(`Failed to fetch preview: ${res.status}`);
+          const body = await res.json();
+          if (body.type === "pptx") {
+            if (!cancelled) setSlides(body.slides || []);
+          } else if (body.type === "text") {
+            if (!cancelled) setSlides([body.text || ""]);
+          }
+        } catch (e: any) {
+          if (!cancelled) setCodeError(e?.message || String(e));
+        } finally {
+          if (!cancelled) setCodeLoading(false);
+        }
+        return;
+      }
+      // otherwise load code/text as before
+      await loadCode();
+    }
+    loadSlidesIfNeeded();
     return () => {
       cancelled = true;
     };
@@ -670,6 +700,42 @@ function ContentPageInner() {
                                 </SyntaxHighlighter>
                               ) : (
                                 <div className="text-sm text-muted-foreground">Unable to preview this file.</div>
+                              )}
+                            </div>
+                          </div>
+                        ) : selectedContent.content_type === "slide" || (selectedContent.file_url || "").toLowerCase().endsWith(".pptx") ? (
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Slides</span>
+                                <Badge variant="outline">{(slides && slides.length) ?? "0"}</Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button size="sm" variant="outline" disabled={!slides || slides.length === 0} onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}>
+                                  Prev
+                                </Button>
+                                <Button size="sm" variant="outline" disabled={!slides || slides.length === 0} onClick={() => setSlideIndex((i) => Math.min((slides?.length ?? 1) - 1, i + 1))}>
+                                  Next
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="h-[60vh] overflow-auto rounded border border-border/60 bg-muted/5 p-3">
+                              {codeLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Loader2 className="size-4 animate-spin" />
+                                  Loading slides…
+                                </div>
+                              ) : codeError ? (
+                                <div className="text-sm text-destructive">{codeError}</div>
+                              ) : slides && slides.length > 0 ? (
+                                <div>
+                                  <h3 className="text-sm font-semibold mb-2">Slide {slideIndex + 1} / {slides.length}</h3>
+                                  <div className="prose max-w-none">
+                                    <pre className="whitespace-pre-wrap text-sm font-sans">{slides[slideIndex]}</pre>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-sm text-muted-foreground">No slides available for preview.</div>
                               )}
                             </div>
                           </div>
