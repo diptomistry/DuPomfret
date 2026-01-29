@@ -166,16 +166,37 @@ async def get_current_user(
                 detail="Invalid token: missing user_id"
             )
         
-        # Fetch user role from database
+        # Fetch user role from database (public.users is source of truth)
         role = "student"  # Default role
+        
+        # 1. Try to get role from public.users table (source of truth)
         try:
             response = supabase.table("users").select("role").eq("id", user_id).single().execute()
-            if response.data:
+            if response.data and response.data.get("role"):
                 role = response.data.get("role", "student")
-        except Exception:
-            # If user doesn't exist in users table yet, default to student
-            # The trigger should create it, but handle gracefully
-            pass
+                # Log for debugging
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Fetched role '{role}' from public.users for user {user_id}")
+        except Exception as db_err:
+            # If user doesn't exist in users table yet, try JWT metadata fallback
+            # Log for debugging but don't fail - fallback to JWT metadata
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Could not fetch role from public.users for {user_id}: {db_err}")
+            
+            # 2. Fallback to JWT app_metadata.role or user_metadata.role
+            app_metadata = payload.get("app_metadata", {})
+            user_metadata = payload.get("user_metadata", {})
+            
+            if app_metadata.get("role"):
+                role = app_metadata.get("role", "student")
+                logger.info(f"Using role '{role}' from JWT app_metadata for user {user_id}")
+            elif user_metadata.get("role"):
+                role = user_metadata.get("role", "student")
+                logger.info(f"Using role '{role}' from JWT user_metadata for user {user_id}")
+            else:
+                logger.warning(f"No role found in database or JWT for {user_id}, defaulting to 'student'")
         
         return User(user_id=user_id, email=email, role=role)
 

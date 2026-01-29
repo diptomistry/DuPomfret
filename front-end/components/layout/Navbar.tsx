@@ -10,11 +10,15 @@ import { ROUTES } from "@/lib/constants";
 import { LogOut, LayoutDashboard, Sparkles, Users } from "lucide-react";
 
 export function Navbar() {
-    const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+    const user = useAuthStore((s) => s.user);
+    const session = useAuthStore((s) => s.session);
     const role = useAuthStore((s) => s.role);
     const { logout } = useAuth();
     const pathname = usePathname();
     const isDashboard = pathname?.startsWith("/dashboard");
+    
+    // Use actual user/session check instead of isAuthenticated flag
+    const isAuthenticated = !!user && !!session;
 
     return (
         <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/70 shadow-lg shadow-black/5 backdrop-blur-2xl dark:bg-background/60 dark:border-border/30 dark:shadow-black/20">

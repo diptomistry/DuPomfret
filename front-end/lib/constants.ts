@@ -17,3 +17,6 @@ export const THEME_STORAGE_KEY = "theme";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+// Where we persist the Supabase access token for attaching as Bearer auth
+export const BEARER_TOKEN_STORAGE_KEY = "bearer_tokenBUET";
