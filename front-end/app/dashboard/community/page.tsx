@@ -79,6 +79,26 @@ export default function CommunityPage() {
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [botLoadingCommentId, setBotLoadingCommentId] = useState<
+        string | null
+    >(null);
+
+    const handleReplyClick = (commentId: string) => {
+        setReplyToId(commentId);
+        // Scroll to comment input
+        setTimeout(() => {
+            const commentInput = document.querySelector(
+                'textarea[placeholder*="reply"]',
+            );
+            if (commentInput) {
+                commentInput.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                });
+                (commentInput as HTMLTextAreaElement).focus();
+            }
+        }, 100);
+    };
 
     useEffect(() => {
         fetchCourses();
@@ -245,10 +265,106 @@ export default function CommunityPage() {
             if (response.ok) {
                 setNewComment("");
                 setReplyToId(null);
+                setError(null);
                 await fetchComments(selectedPost.id);
+            } else {
+                const errorData = await response.json();
+                setError(
+                    `Failed to create comment: ${errorData.detail || "Unknown error"}`,
+                );
             }
         } catch (err) {
             console.error("Error creating comment:", err);
+            setError("Error creating comment. Please try again.");
+        }
+    };
+
+    const handleRequestBotHelp = async (commentId: string) => {
+        if (!selectedPost) return;
+
+        try {
+            setBotLoadingCommentId(commentId);
+            const supabase = createClient();
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+            if (!session) return;
+
+            const response = await fetch(
+                `http://localhost:8000/community/posts/${selectedPost.id}/bot-reply?parent_comment_id=${commentId}`,
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                    },
+                },
+            );
+
+            if (response.ok) {
+                await fetchComments(selectedPost.id);
+            } else {
+                setError("Failed to get AI assistance");
+            }
+        } catch (err) {
+            console.error("Error requesting bot help:", err);
+            setError("Error requesting AI assistance");
+        } finally {
+            setBotLoadingCommentId(null);
+        }
+    };
+
+    const handleAskAIAboutPost = async () => {
+        if (!selectedPost) return;
+
+        try {
+            setIsLoading(true);
+            const supabase = createClient();
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+            if (!session) return;
+
+            // Create a temporary comment to ask about the post
+            const tempCommentResponse = await fetch(
+                `http://localhost:8000/community/posts/${selectedPost.id}/comments`,
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        body: "Can you help me understand this post?",
+                        parent_comment_id: undefined,
+                    }),
+                },
+            );
+
+            if (tempCommentResponse.ok) {
+                const tempComment = await tempCommentResponse.json();
+
+                // Now request bot reply for this comment
+                const botResponse = await fetch(
+                    `http://localhost:8000/community/posts/${selectedPost.id}/bot-reply?parent_comment_id=${tempComment.id}`,
+                    {
+                        method: "POST",
+                        headers: {
+                            Authorization: `Bearer ${session.access_token}`,
+                        },
+                    },
+                );
+
+                if (botResponse.ok) {
+                    await fetchComments(selectedPost.id);
+                } else {
+                    setError("Failed to get AI assistance");
+                }
+            }
+        } catch (err) {
+            console.error("Error requesting AI about post:", err);
+            setError("Error requesting AI assistance");
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -323,12 +439,54 @@ export default function CommunityPage() {
                             <p className="text-sm whitespace-pre-wrap text-foreground/90 leading-relaxed">
                                 {comment.body}
                             </p>
+
+                            {/* Bot Grounding Sources */}
+                            {comment.is_bot &&
+                                comment.grounding_metadata &&
+                                Array.isArray(comment.grounding_metadata) &&
+                                comment.grounding_metadata.length > 0 && (
+                                    <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                                        <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">
+                                            📚 Sources:
+                                        </p>
+                                        <div className="space-y-1">
+                                            {comment.grounding_metadata
+                                                .slice(0, 3)
+                                                .map(
+                                                    (
+                                                        source: any,
+                                                        idx: number,
+                                                    ) => (
+                                                        <div
+                                                            key={idx}
+                                                            className="text-xs text-blue-600 dark:text-blue-400 flex items-start gap-1"
+                                                        >
+                                                            <span className="font-medium">
+                                                                {idx + 1}.
+                                                            </span>
+                                                            <span className="flex-1">
+                                                                {source.metadata
+                                                                    ?.content_type ||
+                                                                    "Document"}{" "}
+                                                                -{" "}
+                                                                {source.metadata
+                                                                    ?.topic ||
+                                                                    "Related content"}
+                                                            </span>
+                                                        </div>
+                                                    ),
+                                                )}
+                                        </div>
+                                    </div>
+                                )}
+
+                            {/* Reply Button */}
                             {!comment.is_bot && depth < 3 && (
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     className="h-7 px-2 mt-2 text-xs"
-                                    onClick={() => setReplyToId(comment.id)}
+                                    onClick={() => handleReplyClick(comment.id)}
                                 >
                                     <Send className="size-3 mr-1" />
                                     Reply
@@ -680,36 +838,6 @@ export default function CommunityPage() {
                                         ))}
                                     </div>
                                 )}
-
-                                {/* Help Card */}
-                                <Card className="bg-gradient-to-br from-primary/5 to-purple-500/5 border-primary/20">
-                                    <CardHeader className="p-4 pb-3">
-                                        <CardTitle className="text-base flex items-center gap-2">
-                                            <Bot className="size-4 text-primary" />
-                                            AI-Powered Support
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="p-4 pt-0 space-y-2 text-xs text-muted-foreground">
-                                        <p>
-                                            <strong className="text-foreground">
-                                                💡 Smart Assistance:
-                                            </strong>{" "}
-                                            When you mention another student
-                                            who&apos;s unavailable, our AI
-                                            assistant will automatically provide
-                                            a helpful response based on your
-                                            course materials.
-                                        </p>
-                                        <p>
-                                            <strong className="text-foreground">
-                                                🎯 Grounded Replies:
-                                            </strong>{" "}
-                                            All bot responses include references
-                                            to source materials for accuracy and
-                                            transparency.
-                                        </p>
-                                    </CardContent>
-                                </Card>
                             </>
                         ) : (
                             /* Post Detail View */
@@ -764,7 +892,7 @@ export default function CommunityPage() {
                                             {selectedPost.body}
                                         </p>
                                         {selectedPost.tags.length > 0 && (
-                                            <div className="flex flex-wrap gap-2">
+                                            <div className="flex flex-wrap gap-2 mb-4">
                                                 {selectedPost.tags.map(
                                                     (tag, idx) => (
                                                         <Badge
@@ -778,6 +906,29 @@ export default function CommunityPage() {
                                                 )}
                                             </div>
                                         )}
+
+                                        {/* Ask AI Button */}
+                                        <div className="pt-3 border-t">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleAskAIAboutPost}
+                                                disabled={isLoading}
+                                                className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950"
+                                            >
+                                                {isLoading ? (
+                                                    <>
+                                                        <Loader2 className="size-4 mr-2 animate-spin" />
+                                                        Getting AI Answer...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Bot className="size-4 mr-2" />
+                                                        Ask AI About This Post
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
                                     </CardContent>
                                 </Card>
 
@@ -799,19 +950,29 @@ export default function CommunityPage() {
                                         {/* Comment Input */}
                                         <div className="space-y-2">
                                             {replyToId && (
-                                                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-lg">
-                                                    <span>
-                                                        Replying to a comment
-                                                    </span>
+                                                <div className="flex items-start gap-2 text-xs bg-muted px-3 py-2 rounded-lg border">
+                                                    <div className="flex-1">
+                                                        <p className="text-muted-foreground mb-1">
+                                                            Replying to:
+                                                        </p>
+                                                        <p className="text-foreground font-medium line-clamp-2">
+                                                            {comments.find(
+                                                                (c) =>
+                                                                    c.id ===
+                                                                    replyToId,
+                                                            )?.body ||
+                                                                "comment"}
+                                                        </p>
+                                                    </div>
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
                                                         onClick={() =>
                                                             setReplyToId(null)
                                                         }
-                                                        className="h-5 w-5 p-0 ml-auto"
+                                                        className="h-6 w-6 p-0 shrink-0"
                                                     >
-                                                        <X className="size-3" />
+                                                        <X className="size-4" />
                                                     </Button>
                                                 </div>
                                             )}

@@ -319,12 +319,12 @@ class CommunityService:
             bot_comment_data = {
                 "id": str(uuid4()),
                 "post_id": post_id,
-                "author_id": self.SYSTEM_BOT_USER_ID,  # Use system bot user
+                "author_id": None,  # Bot comments don't have a user author
                 "body": bot_content,
                 "parent_comment_id": parent_comment_id,
                 "is_bot": True,
                 "is_auto_reply": True,
-                "auto_reply_reason": "receiver_offline",
+                "auto_reply_reason": "manual_request",
                 "grounding_metadata": rag_response.get("sources", []),
                 "created_at": datetime.utcnow().isoformat()
             }
