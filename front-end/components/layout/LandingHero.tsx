@@ -14,6 +14,7 @@ import {
     Code2,
     GraduationCap,
 } from "lucide-react";
+import Logo from "./Logo";
 
 const stats = [
     { icon: Brain, value: "AI-Powered", label: "Smart Assistance" },
@@ -37,9 +38,7 @@ export function LandingHero() {
                     <div className="text-center lg:text-left">
                         <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl xl:text-7xl">
                             <span className="relative inline-flex items-center gap-3">
-                                {/* logo */}
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src="/Gemini_Generated_Image_1n7zgl1n7zgl1n7z.png" alt="Orion" className="w-12 h-12 rounded-lg object-contain" />
+                                <Logo width={48} height={48} />
                                 <span className="bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
                                     Orion
                                 </span>
