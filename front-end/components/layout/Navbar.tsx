@@ -26,13 +26,8 @@ export function Navbar() {
                         <Sparkles className="size-4 sm:size-5" />
                         <span className="absolute inset-0 rounded-xl bg-white/20 opacity-0 transition-opacity group-hover:opacity-100" />
                     </span>
-                    <span className="hidden sm:flex flex-col">
-                        <span className="text-base sm:text-lg font-bold tracking-tight">
-                            AI Companion
-                        </span>
-                        <span className="text-[10px] sm:text-xs text-muted-foreground font-medium -mt-0.5">
-                            Course Assistant
-                        </span>
+                    <span className="text-base sm:text-lg font-bold tracking-tight">
+                        Orion
                     </span>
                 </Link>
 
@@ -50,20 +45,6 @@ export function Navbar() {
                                         <LayoutDashboard className="size-4" />
                                         <span className="hidden sm:inline font-medium">
                                             Dashboard
-                                        </span>
-                                    </Link>
-                                </Button>
-                            )}
-                            {isDashboard && (
-                                <Button
-                                    variant="ghost"
-                                    asChild
-                                    className="gap-2 h-9 sm:h-10 px-3 sm:px-4 text-sm"
-                                >
-                                    <Link href={ROUTES.DASHBOARD}>
-                                        <LayoutDashboard className="size-4" />
-                                        <span className="hidden sm:inline font-medium">
-                                            Home
                                         </span>
                                     </Link>
                                 </Button>
