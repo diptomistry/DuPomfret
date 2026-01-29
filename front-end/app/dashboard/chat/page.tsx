@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css";
 import {
     MessageCircle,
     Send,
@@ -85,6 +89,7 @@ export default function ChatPage() {
     const [courses, setCourses] = useState<Course[]>([]);
     const [courseId, setCourseId] = useState<string>("");
     const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+    const [showSourcesPanel, setShowSourcesPanel] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -397,6 +402,7 @@ export default function ChatPage() {
 
             if (data.sources && data.sources.length > 0) {
                 setSelectedSources(data.sources);
+                setShowSourcesPanel(true);
             }
         } catch (err) {
             console.error("Chat error:", err);
@@ -492,8 +498,8 @@ export default function ChatPage() {
                             </div>
                         </div>
 
-                        {/* Main Content Grid - 3 Column Layout */}
-                        <div className="grid gap-4 lg:grid-cols-[280px,1fr,380px] xl:grid-cols-[300px,1fr,420px]">
+                        {/* Main Content Grid - Single Column Layout */}
+                        <div className="grid gap-4 lg:grid-cols-[280px,1fr]">
                             {/* Chat History Sidebar */}
                             <Card className="border-2 max-h-[600px] flex flex-col overflow-hidden">
                                 <CardHeader className="border-b border-border/40 pb-4">
@@ -686,11 +692,31 @@ export default function ChatPage() {
                                                                             : "bg-muted border border-border/50",
                                                                     )}
                                                                 >
-                                                                    <p className="whitespace-pre-wrap leading-relaxed text-sm">
-                                                                        {
-                                                                            m.content
-                                                                        }
-                                                                    </p>
+                                                                    {m.role ===
+                                                                    "assistant" ? (
+                                                                        <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-headings:text-foreground prose-p:text-foreground prose-p:leading-relaxed prose-strong:text-foreground prose-strong:font-semibold prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-[#0d1117] prose-pre:border prose-pre:border-border/50 prose-li:text-foreground prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground prose-a:text-primary hover:prose-a:text-primary/80">
+                                                                            <ReactMarkdown
+                                                                                remarkPlugins={[
+                                                                                    remarkGfm,
+                                                                                ]}
+                                                                                rehypePlugins={[
+                                                                                    rehypeHighlight,
+                                                                                ]}
+                                                                            >
+                                                                                {
+                                                                                    m.content
+                                                                                }
+                                                                            </ReactMarkdown>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                                                                            <p className="whitespace-pre-wrap leading-relaxed text-sm m-0">
+                                                                                {
+                                                                                    m.content
+                                                                                }
+                                                                            </p>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             )}
 
@@ -704,15 +730,19 @@ export default function ChatPage() {
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="sm"
-                                                                        className="self-start text-xs gap-1.5"
-                                                                        onClick={() =>
+                                                                        className="self-start text-xs gap-1.5 hover:bg-primary/10"
+                                                                        onClick={() => {
                                                                             setSelectedSources(
                                                                                 m.sources ||
                                                                                     [],
-                                                                            )
-                                                                        }
+                                                                            );
+                                                                            setShowSourcesPanel(
+                                                                                true,
+                                                                            );
+                                                                        }}
                                                                     >
                                                                         <FileText className="size-3" />
+                                                                        View{" "}
                                                                         {
                                                                             m
                                                                                 .sources
@@ -857,36 +887,43 @@ export default function ChatPage() {
                                     </div>
                                 </CardContent>
                             </Card>
+                        </div>
 
-                            {/* Sources Sidebar */}
-                            <Card className="border-2 max-h-[600px] flex flex-col overflow-hidden">
-                                <CardHeader className="border-b border-border/40 pb-4">
-                                    <CardTitle className="flex items-center gap-2">
-                                        <FileText className="size-5 text-primary" />
-                                        Source References
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Materials used to generate the response
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="flex-1 overflow-auto p-4 space-y-3">
-                                    {selectedSources.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-full text-center space-y-3">
-                                            <div className="size-14 rounded-xl bg-muted flex items-center justify-center">
-                                                <BookOpen className="size-7 text-muted-foreground" />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-semibold text-sm mb-1">
-                                                    No sources yet
-                                                </h4>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Ask a question to see
-                                                    relevant sources
-                                                </p>
-                                            </div>
+                        {/* Sliding Sources Panel */}
+                        {showSourcesPanel && (
+                            <>
+                                {/* Backdrop */}
+                                <div
+                                    className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+                                    onClick={() => setShowSourcesPanel(false)}
+                                />
+
+                                {/* Slide Panel */}
+                                <div className="fixed right-0 top-0 bottom-0 w-full sm:w-[400px] md:w-[480px] bg-background border-l border-border shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                                    <div className="flex items-center justify-between p-4 border-b border-border/40">
+                                        <div>
+                                            <h3 className="font-semibold flex items-center gap-2">
+                                                <FileText className="size-5 text-primary" />
+                                                Source References
+                                            </h3>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {selectedSources.length}{" "}
+                                                materials used
+                                            </p>
                                         </div>
-                                    ) : (
-                                        selectedSources.map((source, idx) => {
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() =>
+                                                setShowSourcesPanel(false)
+                                            }
+                                        >
+                                            <X className="size-4" />
+                                        </Button>
+                                    </div>
+
+                                    <div className="flex-1 overflow-auto p-4 space-y-3">
+                                        {selectedSources.map((source, idx) => {
                                             const Icon = getSourceIcon(
                                                 source.metadata.type,
                                             );
@@ -902,7 +939,7 @@ export default function ChatPage() {
                                                     <CardContent className="p-4 space-y-3">
                                                         <div className="flex items-start gap-3">
                                                             <div
-                                                                className={`size-10 rounded-lg bg-gradient-to-br ${gradient} p-2.5 shadow-lg flex-shrink-0`}
+                                                                className={`size-10 rounded-lg bg-gradient-to-br ${gradient} p-2.5 shadow-lg shrink-0`}
                                                             >
                                                                 <Icon className="size-5 text-white" />
                                                             </div>
@@ -956,16 +993,16 @@ export default function ChatPage() {
                                                             </div>
                                                         </div>
 
-                                                        <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed bg-muted/50 rounded-lg p-3">
+                                                        <p className="text-xs text-muted-foreground leading-relaxed bg-muted/50 rounded-lg p-3">
                                                             {source.content}
                                                         </p>
 
                                                         {source.metadata
                                                             .url && (
                                                             <Button
-                                                                variant="ghost"
+                                                                variant="outline"
                                                                 size="sm"
-                                                                className="w-full justify-start text-xs gap-2"
+                                                                className="w-full text-xs gap-1.5"
                                                                 onClick={() =>
                                                                     window.open(
                                                                         source
@@ -982,11 +1019,11 @@ export default function ChatPage() {
                                                     </CardContent>
                                                 </Card>
                                             );
-                                        })
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </div>
+                                        })}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </AppShell>

@@ -147,13 +147,19 @@ class ChatService:
         await self.ensure_course_content_embedded(course_id)
 
         # 2) Retrieve course-aware context via RAG service
+        # Increase top_k for more specific queries
+        top_k = 6
+        if any(keyword in message.lower() for keyword in ['part', 'section', 'chapter', 'specific', 'explain']):
+            top_k = 12  # Get more chunks for specific queries
+            print(f"Detected specific query, increasing top_k to {top_k}")
+        
         rag_result = await self.rag.query_for_course(
             course_id=course_id,
             question=message,
             category=None,
             topic=None,
             language=None,
-            top_k=6,
+            top_k=top_k,
         )
         
         # Debug: Check what we got from RAG
@@ -170,20 +176,52 @@ class ChatService:
         for msg in history:
             history_text += f"{msg['role']}: {msg['content']}\n"
 
-        context_snippets = "\n\n".join(
-            f"- {src['content']}" for src in rag_result.get("sources", [])
-        )
+        # Build context with more structure
+        context_snippets = []
+        for idx, src in enumerate(rag_result.get("sources", []), 1):
+            snippet = f"[Source {idx}]"
+            metadata = src.get('metadata', {})
+            if metadata.get('topic'):
+                snippet += f" Topic: {metadata['topic']}"
+            if metadata.get('week'):
+                snippet += f" Week {metadata['week']}"
+            snippet += f"\n{src['content']}\n"
+            context_snippets.append(snippet)
+        
+        context_text = "\n".join(context_snippets)
 
         system_prompt = (
-            "You are a helpful teaching assistant for a university CS course. "
-            "Use the retrieved context from course materials as your primary source of truth. "
-            "If something is unclear from the context, say so explicitly."
+            "You are a helpful teaching assistant for a university course. "
+            "You have access to course materials including PDFs, slides, and documents. "
+            "Use the retrieved context to answer questions accurately. "
+            "If the question asks about a specific part, section, or topic, focus on that information. "
+            "If the context doesn't contain the specific information requested, say so clearly. "
+            "Provide detailed explanations with examples when available in the context.\n\n"
+            "IMPORTANT FORMATTING RULES:\n"
+            "- Use **bold** for headings, section titles, and important terms\n"
+            "- Use numbered lists (1., 2., 3.) for steps or main points\n"
+            "- Use bullet points (- ) for sub-points\n"
+            "- Use `inline code` for technical terms, commands, or short code snippets\n"
+            "- Use code blocks with language tags for longer code examples:\n"
+            "  ```python\n"
+            "  # code here\n"
+            "  ```\n"
+            "- Use > for important notes or quotes\n"
+            "- Structure your response with clear sections using **Section Name**:\n"
+            "- Add line breaks between sections for readability\n"
+            "- Use emphasis (*text*) for definitions or key concepts"
         )
         user_prompt = (
-            f"Conversation so far:\n{history_text}\n\n"
-            f"Retrieved course context:\n{context_snippets}\n\n"
-            f"Student message:\n{message}\n\n"
-            "Respond concisely, with clear steps and code examples where appropriate."
+            f"Conversation history:\n{history_text}\n\n"
+            f"Course materials retrieved:\n{context_text}\n\n"
+            f"Student question: {message}\n\n"
+            "Instructions:\n"
+            "- Answer based on the course materials above\n"
+            "- If the question asks about a specific part/section, find and explain that part\n"
+            "- Format your response using markdown for better readability\n"
+            "- Use bold for headings, code blocks for code, and proper structure\n"
+            "- Be thorough and provide all relevant details from the materials\n"
+            "- If information is incomplete, acknowledge what's missing"
         )
 
         completion = openai_client.chat.completions.create(
@@ -193,7 +231,7 @@ class ChatService:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
-            max_tokens=800,
+            max_tokens=1200,  # Increased for more detailed answers
         )
         answer = completion.choices[0].message.content.strip()
 
