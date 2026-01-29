@@ -20,14 +20,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
-  listCourses,
-  listCourseContents,
   ingestCourseContent,
   uploadFile,
   type Course,
   type CourseContent,
   type IngestRequest,
 } from "@/lib/courses-api";
+import { useCoursesStore } from "@/store/useCoursesStore";
 import { ROUTES } from "@/lib/constants";
 import {
   FileText,
@@ -44,6 +43,7 @@ import {
   ArrowRight,
   X,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 
 const MATERIAL_TYPES = ["slide", "pdf", "code", "note", "image"] as const;
@@ -86,9 +86,26 @@ function ContentPageInner() {
     }
   }, [courseIdFromUrl]);
 
+  async function reloadAll() {
+    if (!token) return;
+    setError(null);
+    try {
+      await loadCourses(token);
+      if (selectedCourseId) {
+        await loadContents(
+          token,
+          selectedCourseId,
+          filterCategory,
+          filterWeek ? parseInt(filterWeek, 10) : undefined
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reload.");
+    }
+  }
+
   useEffect(() => {
     if (!token) {
-      setCoursesLoading(false);
       setError("Not signed in.");
       return;
     }
@@ -140,8 +157,11 @@ function ContentPageInner() {
   }, [token, selectedCourseId, filterCategory, filterWeek]);
 
   useEffect(() => {
-    loadContents();
-  }, [loadContents]);
+    if (!token || !selectedCourseId) return;
+    const weekNum = filterWeek ? parseInt(filterWeek, 10) : undefined;
+    // loadContents will return cached data if available
+    loadContents(token, selectedCourseId, filterCategory, weekNum);
+  }, [token, selectedCourseId, filterCategory, filterWeek, loadContents]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addStep, setAddStep] = useState<"upload-or-url" | "metadata">(
@@ -244,7 +264,8 @@ function ContentPageInner() {
     try {
       await ingestCourseContent(token, body);
       closeAddMaterial();
-      loadContents();
+      // refresh current list (bypass cache by re-loading)
+      await loadContents(token, selectedCourseId, filterCategory, filterWeek ? parseInt(filterWeek, 10) : undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add material.");
     } finally {
@@ -253,6 +274,18 @@ function ContentPageInner() {
   }
 
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedContent, setSelectedContent] = useState<CourseContent | null>(null);
+
+  function openViewer(content: CourseContent) {
+    setSelectedContent(content);
+    setViewerOpen(true);
+  }
+
+  function closeViewer() {
+    setViewerOpen(false);
+    setSelectedContent(null);
+  }
 
   return (
     <div className="min-h-svh">
@@ -332,10 +365,10 @@ function ContentPageInner() {
               </div>
             )}
 
-            {/* When upload open: collapse list left, upload panel on right */}
+            {/* When upload or viewer open: collapse list left, panel on right */}
             <div
               className={
-                addOpen && role === "admin"
+                (addOpen && role === "admin") || viewerOpen
                   ? "grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,360px)_1fr] lg:gap-6"
                   : "space-y-4"
               }
@@ -343,7 +376,7 @@ function ContentPageInner() {
               {/* Materials list — collapsed width when upload is open */}
               <Card
                 className={
-                  addOpen && role === "admin"
+                  (addOpen && role === "admin") || viewerOpen
                     ? "overflow-hidden border border-border/80 bg-card/80 backdrop-blur-sm min-w-0 lg:max-w-[360px] lg:max-h-[calc(100vh-12rem)] lg:flex lg:flex-col"
                     : "overflow-hidden border border-border/80 bg-card/80 backdrop-blur-sm"
                 }

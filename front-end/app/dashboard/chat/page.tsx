@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css";
 import {
     MessageCircle,
     Send,
@@ -62,6 +66,8 @@ interface ChatSession {
     messages: Message[];
     createdAt: string;
     updatedAt: string;
+    backendSessionId?: string; // Session ID from backend API
+    courseId?: string; // Course ID associated with this session
 }
 
 interface Course {
@@ -83,6 +89,7 @@ export default function ChatPage() {
     const [courses, setCourses] = useState<Course[]>([]);
     const [courseId, setCourseId] = useState<string>("");
     const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+    const [showSourcesPanel, setShowSourcesPanel] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -165,6 +172,8 @@ export default function ChatPage() {
             messages: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
+            backendSessionId: undefined, // Will be created when first message is sent
+            courseId: courseId || undefined,
         };
         setSessions((prev) => [newSession, ...prev]);
         setCurrentSessionId(newSession.id);
@@ -237,24 +246,34 @@ export default function ChatPage() {
         const content = input.trim();
         if (!content && uploadedImages.length === 0) return;
 
+        if (!courseId) {
+            setError("Please select a course first.");
+            return;
+        }
+
         setInput("");
         const imagesToSend = [...uploadedImages];
         setUploadedImages([]);
         setError(null);
 
-        // Ensure we have a session
+        // Ensure we have a local session
         let sessionId = currentSessionId;
-        if (!sessionId) {
+        let localSession = sessions.find((s) => s.id === sessionId);
+
+        if (!sessionId || !localSession) {
             const newSession: ChatSession = {
                 id: crypto.randomUUID(),
                 title: "New Chat",
                 messages: [],
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
+                backendSessionId: undefined,
+                courseId: courseId,
             };
             setSessions((prev) => [newSession, ...prev]);
             setCurrentSessionId(newSession.id);
             sessionId = newSession.id;
+            localSession = newSession;
         }
 
         const userMessage: Message = {
@@ -284,47 +303,77 @@ export default function ChatPage() {
                 throw new Error("Not authenticated. Please log in.");
             }
 
-            // Print bearer token for debugging
-            console.log("Bearer Token:", session.access_token);
-            console.log("User ID:", session.user.id);
-            console.log(
-                "Token expires at:",
-                new Date(session.expires_at! * 1000).toLocaleString(),
-            );
-
-            // Call RAG search endpoint
             const apiUrl =
                 process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-            console.log(
-                "Making request to:",
-                `${apiUrl}/courses/${courseId}/search`,
-            );
-            console.log("Course ID:", courseId);
-            console.log("Query:", content || "Analyze these images");
+            // Check if we need to create a backend session
+            let backendSessionId = localSession?.backendSessionId;
 
-            // Prepare request body with images
-            const requestBody: any = {
-                query: content || "Analyze these images",
-                top_k: 5,
-            };
+            // Create backend session if not exists or if course changed
+            if (!backendSessionId || localSession?.courseId !== courseId) {
+                console.log(
+                    "Creating new backend chat session for course:",
+                    courseId,
+                );
 
-            // If images are present, include them in the request
-            if (imagesToSend.length > 0) {
-                requestBody.images = imagesToSend;
-            }
-
-            const response = await fetch(
-                `${apiUrl}/courses/${courseId}/search`,
-                {
+                const sessionResponse = await fetch(`${apiUrl}/chat/session`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                         Authorization: `Bearer ${session.access_token}`,
                     },
-                    body: JSON.stringify(requestBody),
-                },
+                    body: JSON.stringify({
+                        course_id: courseId,
+                    }),
+                });
+
+                if (!sessionResponse.ok) {
+                    const errorData = await sessionResponse
+                        .json()
+                        .catch(() => null);
+                    throw new Error(
+                        errorData?.detail ||
+                            `Failed to create chat session: ${sessionResponse.status}`,
+                    );
+                }
+
+                const sessionData = await sessionResponse.json();
+                backendSessionId = sessionData.id;
+
+                // Update the local session with backend session ID and course ID
+                setSessions((prev) =>
+                    prev.map((s) =>
+                        s.id === sessionId
+                            ? {
+                                  ...s,
+                                  backendSessionId: backendSessionId,
+                                  courseId: courseId,
+                                  updatedAt: new Date().toISOString(),
+                              }
+                            : s,
+                    ),
+                );
+
+                console.log("Backend session created:", backendSessionId);
+            }
+
+            console.log(
+                "Sending message to backend session:",
+                backendSessionId,
             );
+            console.log("Message:", content || "Analyze these images");
+
+            // Send message to chat endpoint
+            const response = await fetch(`${apiUrl}/chat/${backendSessionId}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    message: content || "Analyze these images",
+                }),
+            });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => null);
@@ -353,16 +402,10 @@ export default function ChatPage() {
 
             if (data.sources && data.sources.length > 0) {
                 setSelectedSources(data.sources);
+                setShowSourcesPanel(true);
             }
         } catch (err) {
             console.error("Chat error:", err);
-            console.error("Error details:", {
-                courseId,
-                apiUrl:
-                    process.env.NEXT_PUBLIC_API_BASE_URL ||
-                    "http://localhost:8000",
-                endpoint: `/courses/${courseId}/search`,
-            });
             const errorMessage =
                 err instanceof Error
                     ? err.message
@@ -455,8 +498,8 @@ export default function ChatPage() {
                             </div>
                         </div>
 
-                        {/* Main Content Grid - 3 Column Layout */}
-                        <div className="grid gap-4 lg:grid-cols-[280px,1fr,380px] xl:grid-cols-[300px,1fr,420px]">
+                        {/* Main Content Grid - Single Column Layout */}
+                        <div className="grid gap-4 lg:grid-cols-[280px,1fr]">
                             {/* Chat History Sidebar */}
                             <Card className="border-2 max-h-[600px] flex flex-col overflow-hidden">
                                 <CardHeader className="border-b border-border/40 pb-4">
@@ -649,11 +692,31 @@ export default function ChatPage() {
                                                                             : "bg-muted border border-border/50",
                                                                     )}
                                                                 >
-                                                                    <p className="whitespace-pre-wrap leading-relaxed text-sm">
-                                                                        {
-                                                                            m.content
-                                                                        }
-                                                                    </p>
+                                                                    {m.role ===
+                                                                    "assistant" ? (
+                                                                        <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-headings:text-foreground prose-p:text-foreground prose-p:leading-relaxed prose-strong:text-foreground prose-strong:font-semibold prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-[#0d1117] prose-pre:border prose-pre:border-border/50 prose-li:text-foreground prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground prose-a:text-primary hover:prose-a:text-primary/80">
+                                                                            <ReactMarkdown
+                                                                                remarkPlugins={[
+                                                                                    remarkGfm,
+                                                                                ]}
+                                                                                rehypePlugins={[
+                                                                                    rehypeHighlight,
+                                                                                ]}
+                                                                            >
+                                                                                {
+                                                                                    m.content
+                                                                                }
+                                                                            </ReactMarkdown>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                                                                            <p className="whitespace-pre-wrap leading-relaxed text-sm m-0">
+                                                                                {
+                                                                                    m.content
+                                                                                }
+                                                                            </p>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             )}
 
@@ -667,15 +730,19 @@ export default function ChatPage() {
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="sm"
-                                                                        className="self-start text-xs gap-1.5"
-                                                                        onClick={() =>
+                                                                        className="self-start text-xs gap-1.5 hover:bg-primary/10"
+                                                                        onClick={() => {
                                                                             setSelectedSources(
                                                                                 m.sources ||
                                                                                     [],
-                                                                            )
-                                                                        }
+                                                                            );
+                                                                            setShowSourcesPanel(
+                                                                                true,
+                                                                            );
+                                                                        }}
                                                                     >
                                                                         <FileText className="size-3" />
+                                                                        View{" "}
                                                                         {
                                                                             m
                                                                                 .sources
@@ -707,9 +774,7 @@ export default function ChatPage() {
                                                             <div className="flex items-center gap-2">
                                                                 <Loader2 className="size-4 animate-spin text-primary" />
                                                                 <span className="text-sm text-muted-foreground">
-                                                                    Searching
-                                                                    course
-                                                                    materials...
+                                                                    Thinking...
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -822,36 +887,43 @@ export default function ChatPage() {
                                     </div>
                                 </CardContent>
                             </Card>
+                        </div>
 
-                            {/* Sources Sidebar */}
-                            <Card className="border-2 max-h-[600px] flex flex-col overflow-hidden">
-                                <CardHeader className="border-b border-border/40 pb-4">
-                                    <CardTitle className="flex items-center gap-2">
-                                        <FileText className="size-5 text-primary" />
-                                        Source References
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Materials used to generate the response
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="flex-1 overflow-auto p-4 space-y-3">
-                                    {selectedSources.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-full text-center space-y-3">
-                                            <div className="size-14 rounded-xl bg-muted flex items-center justify-center">
-                                                <BookOpen className="size-7 text-muted-foreground" />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-semibold text-sm mb-1">
-                                                    No sources yet
-                                                </h4>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Ask a question to see
-                                                    relevant sources
-                                                </p>
-                                            </div>
+                        {/* Sliding Sources Panel */}
+                        {showSourcesPanel && (
+                            <>
+                                {/* Backdrop */}
+                                <div
+                                    className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+                                    onClick={() => setShowSourcesPanel(false)}
+                                />
+
+                                {/* Slide Panel */}
+                                <div className="fixed right-0 top-0 bottom-0 w-full sm:w-[400px] md:w-[480px] bg-background border-l border-border shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                                    <div className="flex items-center justify-between p-4 border-b border-border/40">
+                                        <div>
+                                            <h3 className="font-semibold flex items-center gap-2">
+                                                <FileText className="size-5 text-primary" />
+                                                Source References
+                                            </h3>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {selectedSources.length}{" "}
+                                                materials used
+                                            </p>
                                         </div>
-                                    ) : (
-                                        selectedSources.map((source, idx) => {
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() =>
+                                                setShowSourcesPanel(false)
+                                            }
+                                        >
+                                            <X className="size-4" />
+                                        </Button>
+                                    </div>
+
+                                    <div className="flex-1 overflow-auto p-4 space-y-3">
+                                        {selectedSources.map((source, idx) => {
                                             const Icon = getSourceIcon(
                                                 source.metadata.type,
                                             );
@@ -867,7 +939,7 @@ export default function ChatPage() {
                                                     <CardContent className="p-4 space-y-3">
                                                         <div className="flex items-start gap-3">
                                                             <div
-                                                                className={`size-10 rounded-lg bg-gradient-to-br ${gradient} p-2.5 shadow-lg flex-shrink-0`}
+                                                                className={`size-10 rounded-lg bg-gradient-to-br ${gradient} p-2.5 shadow-lg shrink-0`}
                                                             >
                                                                 <Icon className="size-5 text-white" />
                                                             </div>
@@ -921,16 +993,16 @@ export default function ChatPage() {
                                                             </div>
                                                         </div>
 
-                                                        <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed bg-muted/50 rounded-lg p-3">
+                                                        <p className="text-xs text-muted-foreground leading-relaxed bg-muted/50 rounded-lg p-3">
                                                             {source.content}
                                                         </p>
 
                                                         {source.metadata
                                                             .url && (
                                                             <Button
-                                                                variant="ghost"
+                                                                variant="outline"
                                                                 size="sm"
-                                                                className="w-full justify-start text-xs gap-2"
+                                                                className="w-full text-xs gap-1.5"
                                                                 onClick={() =>
                                                                     window.open(
                                                                         source
@@ -947,11 +1019,11 @@ export default function ChatPage() {
                                                     </CardContent>
                                                 </Card>
                                             );
-                                        })
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </div>
+                                        })}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </AppShell>

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.admin.service import list_users_admin, update_user_role_admin
 from app.core.auth import User, require_admin
+from app.core.supabase import supabase
 
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
@@ -38,7 +39,8 @@ async def list_users(
     per_page: int = Query(50, ge=1, le=100, description="Items per page"),
 ):
     """
-    List all users (admin only). Returns id, email, and role (from app_metadata).
+    List all users (admin only). Returns id, email, and role (from public.users, ground truth).
+    Falls back to app_metadata if not found in database.
     """
     _ = current_user
     try:
@@ -51,20 +53,44 @@ async def list_users(
     raw_users = data.get("users", [])
     total = data.get("total")
     users: List[UserListItem] = []
+    
+    # Fetch all roles from public.users (ground truth) in one query
+    user_ids = [str(u.get("id")) for u in raw_users if u.get("id")]
+    roles_from_db: dict[str, str] = {}
+    if user_ids:
+        try:
+            response = supabase.table("users").select("id, role").in_("id", user_ids).execute()
+            for row in (response.data or []):
+                if row.get("id") and row.get("role"):
+                    roles_from_db[str(row["id"])] = str(row["role"]).lower()
+        except Exception:
+            # If query fails, fall back to metadata
+            pass
+    
     for u in raw_users:
         uid = u.get("id")
         if not uid:
             continue
-        app_meta = u.get("app_metadata") or {}
-        user_meta = u.get("user_metadata") or {}
-        role = (app_meta.get("role") or user_meta.get("role") or "student")
-        if isinstance(role, str):
-            role = role.lower()
+        uid_str = str(uid)
+        
+        # 1. Try to get role from public.users (ground truth)
+        role = roles_from_db.get(uid_str)
+        
+        # 2. Fallback to app_metadata or user_metadata if not in database
+        if not role:
+            app_meta = u.get("app_metadata") or {}
+            user_meta = u.get("user_metadata") or {}
+            role = (app_meta.get("role") or user_meta.get("role") or "student")
+            if isinstance(role, str):
+                role = role.lower()
+        
+        # 3. Validate and default to student
         if role not in ("admin", "student"):
             role = "student"
+        
         users.append(
             UserListItem(
-                id=str(uid),
+                id=uid_str,
                 email=u.get("email"),
                 role=role,
             )
@@ -93,7 +119,8 @@ async def update_user_role(
     current_user: User = Depends(require_admin),
 ):
     """
-    Set a user's role to admin or student (admin only). Stored in app_metadata.role.
+    Set a user's role to admin or student (admin only). 
+    Updates both Supabase Auth app_metadata and public.users (ground truth).
     """
     _ = current_user
     role = (request.role or "").lower().strip()

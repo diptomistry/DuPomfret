@@ -10,11 +10,44 @@ import { Badge } from "@/components/ui/badge";
 import { ConfidenceMeter } from "@/components/ui/confidence-meter";
 import { EmptyState, ErrorState } from "@/components/ui/empty-state";
 import { SkeletonCard, SkeletonList } from "@/components/ui/skeleton";
-import { SearchResult, semanticSearch, ragQuery } from "@/lib/api";
+import {
+    SearchResult,
+    semanticSearchForCourse,
+    ragQueryForCourse,
+} from "@/lib/api";
+import { listCourses, type Course } from "@/lib/courses-api";
+import { BEARER_TOKEN_STORAGE_KEY } from "@/lib/constants";
+import { useEffect } from "react";
+import Combobox, { Option } from "@/components/ui/Combobox";
 import { Search, FileText, Sparkles, Loader2 } from "lucide-react";
 
 export default function SearchPage() {
     const [query, setQuery] = useState("");
+    const [courseId, setCourseId] = useState<string | undefined>(undefined);
+    const [courses, setCourses] = useState<Course[]>([]);
+    const [loadingCourses, setLoadingCourses] = useState(false);
+
+    useEffect(() => {
+        async function loadCourses() {
+            setLoadingCourses(true);
+            try {
+                const token = typeof window !== "undefined" ? localStorage.getItem(BEARER_TOKEN_STORAGE_KEY) : null;
+                if (!token) {
+                    setCourses([]);
+                    return;
+                }
+                const cs = await listCourses(token);
+                setCourses(cs || []);
+            } catch (err) {
+                console.error("Failed to load courses for selector:", err);
+                setCourses([]);
+            } finally {
+                setLoadingCourses(false);
+            }
+        }
+
+        loadCourses();
+    }, []);
     const [results, setResults] = useState<SearchResult[]>([]);
     const [ragAnswer, setRagAnswer] = useState<string | null>(null);
     const [isSearching, setIsSearching] = useState(false);
@@ -28,8 +61,8 @@ export default function SearchPage() {
         setRagAnswer(null);
         try {
             const [docs, answer] = await Promise.all([
-                semanticSearch(query),
-                ragQuery(query),
+                semanticSearchForCourse(query, courseId),
+                ragQueryForCourse(query, courseId),
             ]);
             setResults(docs);
             setRagAnswer(answer);
@@ -80,6 +113,22 @@ export default function SearchPage() {
                                         disabled={isSearching}
                                         className="flex-1 text-sm"
                                     />
+                                    <div className="w-48">
+                                        <label className="sr-only">Course</label>
+                                        <Combobox
+                                            options={[
+                                                { value: "", label: loadingCourses ? "Loading..." : "All courses" },
+                                                ...courses.map((c) => ({
+                                                    value: c.id,
+                                                    label: `${c.code} — ${c.title}`,
+                                                })),
+                                            ] as Option<Course>[]}
+                                            value={courseId ?? ""}
+                                            onChange={(v) => setCourseId(v || undefined)}
+                                            disabled={isSearching || loadingCourses}
+                                            placeholder="All courses"
+                                        />
+                                    </div>
                                     <Button
                                         type="submit"
                                         disabled={isSearching}

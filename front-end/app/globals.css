@@ -304,4 +304,74 @@
       animation: none;
     }
   }
+
+  /* ===== MARKDOWN CODE BLOCKS ===== */
+  .prose pre {
+    @apply rounded-lg overflow-x-auto;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    padding: 1rem;
+    margin: 0.75rem 0;
+  }
+
+  .prose code {
+    font-size: 0.875em;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  }
+
+  .prose pre code {
+    @apply bg-transparent p-0 text-[0.875rem];
+    color: #e6edf3;
+  }
+
+  .prose :not(pre) > code {
+    font-weight: 500;
+  }
+
+  .prose h1, .prose h2, .prose h3, .prose h4 {
+    margin-top: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .prose h1 {
+    font-size: 1.5rem;
+    line-height: 1.4;
+  }
+
+  .prose h2 {
+    font-size: 1.25rem;
+    line-height: 1.4;
+  }
+
+  .prose h3 {
+    font-size: 1.125rem;
+    line-height: 1.4;
+  }
+
+  .prose p {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .prose ul, .prose ol {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-left: 1.5rem;
+  }
+
+  .prose li {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .prose blockquote {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding-left: 1rem;
+    font-style: italic;
+  }
+
+  .prose strong {
+    font-weight: 600;
+  }
 }

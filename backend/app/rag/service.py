@@ -1,6 +1,7 @@
 """RAG service for question answering with retrieval."""
 from typing import List, Dict, Any
 import openai
+from fastapi import HTTPException, status
 from app.core.config import settings
 from app.utils.embeddings import get_text_embedding
 from app.vectorstore.repository import VectorRepository
@@ -75,7 +76,14 @@ class RAGService:
         - `namespace` is the course_id
         - Filters on metadata: category, topic, language
         """
-        question_embedding = get_text_embedding(question)
+        try:
+            question_embedding = get_text_embedding(question)
+        except Exception as e:
+            # Bubble up a 503 so the frontend sees a clear provider-rate-limit/unavailable error
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Embedding provider unavailable or rate-limited: {str(e)}",
+            )
 
         # Overfetch a bit so that metadata filtering still leaves enough chunks
         raw_chunks = self.vector_repo.similarity_search(
@@ -101,3 +109,49 @@ class RAGService:
         filtered = filtered[:top_k]
 
         return await self._answer_from_chunks(question, filtered)
+
+    async def query_for_user(
+        self,
+        user_id: str,
+        question: str,
+        category: str | None = None,
+        topic: str | None = None,
+        language: str | None = None,
+        top_k: int = 5,
+    ) -> Dict[str, Any]:
+        """
+        Answer a question using RAG across all documents owned by a user.
+        """
+        try:
+            question_embedding = get_text_embedding(question)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Embedding provider unavailable or rate-limited: {str(e)}",
+            )
+
+        # Overfetch to allow for filtering
+        raw_chunks = self.vector_repo.similarity_search_by_user(
+            query_embedding=question_embedding,
+            user_id=user_id,
+            top_k=max(top_k * 4, top_k),
+        )
+
+        # Exclude image documents from RAG context
+        non_image = [c for c in raw_chunks if c.get("type") != "image"]
+
+        def _matches_filters(chunk: Dict[str, Any]) -> bool:
+            md = chunk.get("metadata") or {}
+            if category and md.get("category") != category:
+                return False
+            if topic and md.get("topic") != topic:
+                return False
+            if language and md.get("language") != language:
+                return False
+            return True
+
+        filtered = [c for c in non_image if _matches_filters(c)]
+        filtered = filtered[:top_k]
+
+        return await self._answer_from_chunks(question, filtered)
+
