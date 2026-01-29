@@ -35,6 +35,7 @@ import {
     Image as ImageIcon,
     Copy,
     CheckCircle,
+    Download,
 } from "lucide-react";
 import type {
     Course,
@@ -182,6 +183,43 @@ export default function GeneratePage() {
 
     const canGenerateMedia =
         !!validation && validation.final_verdict === "ready_for_students";
+
+    function downloadAsPdf(text: string, filename: string) {
+        if (typeof window === "undefined") return;
+
+        const escapeHtml = (value: string) =>
+            value
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+        const win = window.open("", "_blank");
+        if (!win) return;
+
+        const safeTitle = filename || "Generated Content";
+        const safeBody = escapeHtml(text);
+
+        win.document.write(`
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${safeTitle}</title>
+    <style>
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 24px; }
+      pre { white-space: pre-wrap; font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>${safeTitle}</h1>
+    <pre>${safeBody}</pre>
+    <script>
+      window.onload = function() { window.print(); };
+    </script>
+  </body>
+</html>`);
+        win.document.close();
+    }
 
     const TypeIcon = typeIcons[format] || FileText;
 
@@ -442,6 +480,19 @@ export default function GeneratePage() {
                                         >
                                             <Copy className="size-4 mr-2" />
                                             Copy
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                downloadAsPdf(
+                                                    output.output,
+                                                    topic || "Generated Content",
+                                                )
+                                            }
+                                        >
+                                            <Download className="size-4 mr-2" />
+                                            Download PDF
                                         </Button>
                                         <Button
                                             variant="outline"
