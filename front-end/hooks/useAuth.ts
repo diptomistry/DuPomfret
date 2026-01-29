@@ -7,6 +7,11 @@ import { useAuthStore, type UserRole } from "@/store/useAuthStore";
 import { ROUTES, BEARER_TOKEN_STORAGE_KEY } from "@/lib/constants";
 import type { Session } from "@supabase/supabase-js";
 
+type InitialSessionPayload = {
+  session: { access_token: string; refresh_token: string; expires_at: number } | null;
+  user: { id: string; email: string | null; user_metadata: any } | null;
+} | null;
+
 function syncTokenToStorage(session: Session | null) {
   if (typeof window === "undefined") return;
   if (session?.access_token) {
@@ -39,7 +44,7 @@ async function fetchUserRole(
   }
 }
 
-export function useAuth() {
+export function useAuth(initialServerSession?: InitialSessionPayload | null) {
   const router = useRouter();
   const { setUser, setRole, setReady, logout: clearStore } = useAuthStore();
   const supabase = useMemo(() => createClient(), []);
@@ -75,7 +80,48 @@ export function useAuth() {
     }
 
     async function initializeAuth() {
+      if (typeof window !== "undefined") {
+        // eslint-disable-next-line no-console
+        console.debug("useAuth initialServerSession:", { hasServerSession: !!initialServerSession });
+      }
       try {
+        // If server provided an initial session payload, hydrate the browser supabase client
+        // using those tokens so we avoid an extra getSession() roundtrip.
+        if (initialServerSession && initialServerSession.session?.access_token) {
+          const { access_token, refresh_token } = initialServerSession.session;
+          const { data: setData, error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (!mounted) return;
+          const finalSession: Session | null = error || !setData?.session ? null : (setData.session as Session);
+
+          // If setSession failed (sometimes server-side tokens aren't accepted by the browser client),
+          // fall back to hydrating the local store from the server payload so UI stays consistent.
+          const user = finalSession?.user ?? (initialServerSession.user as any) ?? null;
+          const sessionToStore = finalSession ?? (initialServerSession.session ? ({ access_token: initialServerSession.session.access_token } as unknown as Session) : null);
+          if (typeof window !== "undefined") {
+            // eslint-disable-next-line no-console
+            console.debug("useAuth hydrating from server:", { finalSessionExists: !!finalSession, user: user?.id ?? null });
+          }
+          setUser(user, sessionToStore ?? null);
+
+          if (user?.id) {
+            const role = await fetchUserRole(supabase, user.id);
+            if (mounted) {
+              setRole(role);
+            }
+          } else {
+            setRole("student");
+          }
+
+          // Ensure token is available in localStorage for API calls that rely on it.
+          syncTokenToStorage(sessionToStore ?? null);
+          if (mounted) setReady(true);
+          return;
+        }
+
+        // Default client-driven flow
         const { data: { session } } = await supabase.auth.getSession();
         if (!mounted) return;
 
@@ -91,7 +137,14 @@ export function useAuth() {
         const user = finalSession?.user ?? null;
         setUser(user, finalSession ?? null);
 
-        if (user?.id) {
+        // Prefer role from token metadata (app_metadata or user_metadata) or top-level role claim
+        const metaRole =
+          (user as any)?.app_metadata?.role ??
+          (user as any)?.user_metadata?.role ??
+          (user as any)?.role;
+        if (metaRole) {
+          setRole(metaRole as UserRole);
+        } else if (user?.id) {
           const role = await fetchUserRole(supabase, user.id);
           if (mounted) {
             setRole(role);
@@ -101,8 +154,19 @@ export function useAuth() {
         }
 
         syncTokenToStorage(finalSession ?? null);
-      } catch (err) {
-        console.error("Failed to initialize auth:", err);
+      } catch (err: any) {
+        // Supabase/goTrue may abort internal requests when newer requests start
+        // (or during fast refresh). Treat AbortError as non-fatal and avoid noisy logs.
+        const isAbort =
+          (err && (err.name === "AbortError" || err.message?.includes?.("signal is aborted"))) ||
+          false;
+        if (!isAbort) {
+          console.error("Failed to initialize auth:", err);
+        } else {
+          // eslint-disable-next-line no-console
+          console.debug("initializeAuth aborted (ignored):", err?.message ?? err);
+        }
+
         if (mounted) {
           setUser(null, null);
           setRole("student");
@@ -123,7 +187,14 @@ export function useAuth() {
       const user = session?.user ?? null;
       setUser(user, session ?? null);
 
-      if (user?.id) {
+      // Use metadata role (app_metadata or user_metadata) if available, otherwise fetch from DB.
+      const metaRole =
+        (user as any)?.app_metadata?.role ??
+        (user as any)?.user_metadata?.role ??
+        (user as any)?.role;
+      if (metaRole) {
+        setRole(metaRole as UserRole);
+      } else if (user?.id) {
         const role = await fetchUserRole(supabase, user.id);
         if (mounted) {
           setRole(role);
@@ -144,25 +215,53 @@ export function useAuth() {
 
   async function logout() {
     // Ask server to clear HttpOnly auth cookies (so SSR + middleware see logout).
+    let serverLogoutError: any = null;
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch {
-      // ignore - we'll still clear client state below
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      if (!res.ok) {
+        serverLogoutError = await res.text();
+      }
+    } catch (err) {
+      serverLogoutError = err;
     }
 
     // Also clear the browser Supabase client session + localStorage token.
+    let signOutError: any = null;
     try {
       await supabase.auth.signOut();
-    } catch {
-      // ignore
-    }
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(BEARER_TOKEN_STORAGE_KEY);
+    } catch (err) {
+      signOutError = err;
+    } finally {
+      // Always clear client-side state to ensure the UI reflects logout immediately.
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(BEARER_TOKEN_STORAGE_KEY);
+        }
+      } catch {
+        // ignore localStorage errors
+      }
+
+      clearStore();
+      // Navigate back to home and refresh so server middleware also sees cleared cookies.
+      try {
+        router.push(ROUTES.HOME);
+        router.refresh();
+      } catch {
+        // ignore navigation errors
+      }
     }
 
-    clearStore();
-    router.push(ROUTES.HOME);
-    router.refresh();
+    // Log non-abort errors for debugging (but don't block UX).
+    const isAbort = (e: any) =>
+      e && (e.name === "AbortError" || typeof e === "string" && e.includes("signal is aborted"));
+    if (serverLogoutError && !isAbort(serverLogoutError)) {
+      // eslint-disable-next-line no-console
+      console.error("Server logout error:", serverLogoutError);
+    }
+    if (signOutError && !isAbort(signOutError)) {
+      // eslint-disable-next-line no-console
+      console.error("Supabase signOut error:", signOutError);
+    }
   }
 
   return { logout };

@@ -41,13 +41,6 @@ const navItems = [
         description: "Create AI study materials",
     },
     {
-        label: "Validate",
-        shortLabel: "Check",
-        href: ROUTES.DASHBOARD_VALIDATE,
-        icon: CheckCircle,
-        description: "Validate code snippets",
-    },
-    {
         label: "Chat",
         shortLabel: "Ask",
         href: ROUTES.DASHBOARD_CHAT,

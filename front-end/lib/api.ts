@@ -15,6 +15,7 @@ import type {
   MediaGenerationRequest,
   MediaGenerationResponse,
   MaterialValidationResponse,
+  CodeValidationApiResponse,
   UploadResponse,
   HandwrittenNoteResponse,
   CreateCourseRequest,
@@ -265,6 +266,11 @@ export interface GeneratedContent {
   language?: string;
 }
 
+type SemanticSearchOptions = {
+  category?: CourseComponent;
+  language?: string;
+};
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -328,6 +334,7 @@ export async function ragQuery(query: string): Promise<string> {
 export async function semanticSearchForCourse(
   query: string,
   courseId?: string,
+  options?: SemanticSearchOptions,
 ): Promise<SearchResult[]> {
   let targetCourseId = courseId;
   if (!targetCourseId) {
@@ -336,7 +343,12 @@ export async function semanticSearchForCourse(
     targetCourseId = courses[0].id;
   }
 
-  const result = await searchCourse(targetCourseId, { query, top_k: 5 });
+  const result = await searchCourse(targetCourseId, {
+    query,
+    top_k: 5,
+    category: options?.category,
+    language: options?.language,
+  });
   return result.sources.map((source, idx) => ({
     id: `result-${idx}`,
     score: 0.8, // Placeholder until backend returns per-source similarity
@@ -349,6 +361,7 @@ export async function semanticSearchForCourse(
 export async function ragQueryForCourse(
   query: string,
   courseId?: string,
+  options?: SemanticSearchOptions,
 ): Promise<string> {
   let targetCourseId = courseId;
   if (!targetCourseId) {
@@ -357,7 +370,12 @@ export async function ragQueryForCourse(
     targetCourseId = courses[0].id;
   }
 
-  const result = await searchCourse(targetCourseId, { query, top_k: 5 });
+  const result = await searchCourse(targetCourseId, {
+    query,
+    top_k: 5,
+    category: options?.category,
+    language: options?.language,
+  });
   return result.answer;
 }
 
@@ -405,12 +423,15 @@ export async function validateCodeSnippet(
   diagnostics?: string[];
   testsPassed?: boolean;
 }> {
-  // This is a placeholder - the actual validation endpoint may differ
-  // For now, we'll use a mock response
+  const response = await apiPost<CodeValidationApiResponse>(
+    `${API_BASE_URL}/rag/validate-code`,
+    { code, language },
+  );
+
   return {
-    isValid: true,
-    diagnostics: [],
-    testsPassed: true,
+    isValid: response.is_valid,
+    diagnostics: response.diagnostics ?? [],
+    testsPassed: response.tests_passed ?? undefined,
   };
 }
 

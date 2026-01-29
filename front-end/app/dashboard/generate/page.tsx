@@ -35,6 +35,7 @@ import {
     Image as ImageIcon,
     Copy,
     CheckCircle,
+    Download,
 } from "lucide-react";
 import type {
     Course,
@@ -178,6 +179,46 @@ export default function GeneratePage() {
 
     function copyToClipboard(text: string) {
         navigator.clipboard.writeText(text);
+    }
+
+    const canGenerateMedia =
+        !!validation && validation.final_verdict === "ready_for_students";
+
+    function downloadAsPdf(text: string, filename: string) {
+        if (typeof window === "undefined") return;
+
+        const escapeHtml = (value: string) =>
+            value
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+        const win = window.open("", "_blank");
+        if (!win) return;
+
+        const safeTitle = filename || "Generated Content";
+        const safeBody = escapeHtml(text);
+
+        win.document.write(`
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${safeTitle}</title>
+    <style>
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 24px; }
+      pre { white-space: pre-wrap; font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>${safeTitle}</h1>
+    <pre>${safeBody}</pre>
+    <script>
+      window.onload = function() { window.print(); };
+    </script>
+  </body>
+</html>`);
+        win.document.close();
     }
 
     const TypeIcon = typeIcons[format] || FileText;
@@ -444,6 +485,19 @@ export default function GeneratePage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() =>
+                                                downloadAsPdf(
+                                                    output.output,
+                                                    topic || "Generated Content",
+                                                )
+                                            }
+                                        >
+                                            <Download className="size-4 mr-2" />
+                                            Download PDF
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
                                                 handleValidate(output.id)
                                             }
                                             disabled={isValidating}
@@ -460,7 +514,9 @@ export default function GeneratePage() {
                                                     "content-to-video",
                                                 )
                                             }
-                                            disabled={isGeneratingMedia}
+                                            disabled={
+                                                isGeneratingMedia || !canGenerateMedia
+                                            }
                                         >
                                             <Video className="size-4 mr-2" />
                                             Video
@@ -474,7 +530,9 @@ export default function GeneratePage() {
                                                     "theory-diagram",
                                                 )
                                             }
-                                            disabled={isGeneratingMedia}
+                                            disabled={
+                                                isGeneratingMedia || !canGenerateMedia
+                                            }
                                         >
                                             <ImageIcon className="size-4 mr-2" />
                                             Diagram
@@ -559,21 +617,32 @@ export default function GeneratePage() {
                                         )}
 
                                     {validation && (
-                                        <div className="mt-4 grid gap-2 sm:grid-cols-4">
-                                            <Badge variant="outline">
-                                                Syntax: {validation.syntax}
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                Grounding:{" "}
-                                                {(validation.grounding_score * 100).toFixed(0)}%
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                Tests:{" "}
-                                                {validation.tests_passed ? "passed" : "failed"}
-                                            </Badge>
-                                            <Badge variant="outline">
-                                                Verdict: {validation.final_verdict}
-                                            </Badge>
+                                        <div className="mt-4 space-y-2">
+                                            <div className="grid gap-2 sm:grid-cols-4">
+                                                <Badge variant="outline">
+                                                    Syntax: {validation.syntax}
+                                                </Badge>
+                                                <Badge variant="outline">
+                                                    Grounding:{" "}
+                                                    {(validation.grounding_score * 100).toFixed(0)}%
+                                                </Badge>
+                                                <Badge variant="outline">
+                                                    Tests:{" "}
+                                                    {validation.tests_passed ? "passed" : "failed"}
+                                                </Badge>
+                                                <Badge variant="outline">
+                                                    Verdict: {validation.final_verdict}
+                                                </Badge>
+                                            </div>
+                                            {!canGenerateMedia && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Run validation and wait for a{" "}
+                                                    <span className="font-medium">
+                                                        Verdict: ready_for_students
+                                                    </span>{" "}
+                                                    before generating diagrams or video.
+                                                </p>
+                                            )}
                                         </div>
                                     )}
 

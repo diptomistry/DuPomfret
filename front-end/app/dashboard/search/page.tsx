@@ -1,6 +1,6 @@
-"use client";
+ "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,7 @@ import {
 } from "@/lib/api";
 import { listCourses, type Course } from "@/lib/courses-api";
 import { BEARER_TOKEN_STORAGE_KEY } from "@/lib/constants";
-import { useEffect } from "react";
-import Combobox, { Option } from "@/components/ui/Combobox";
+import { Combobox, Option } from "@/components/ui/Combobox";
 import { Search, FileText, Sparkles, Loader2 } from "lucide-react";
 
 export default function SearchPage() {
@@ -26,6 +25,10 @@ export default function SearchPage() {
     const [courseId, setCourseId] = useState<string | undefined>(undefined);
     const [courses, setCourses] = useState<Course[]>([]);
     const [loadingCourses, setLoadingCourses] = useState(false);
+    const [componentFilter, setComponentFilter] = useState<
+        "all" | "lab" | "theory"
+    >("all");
+    const [language, setLanguage] = useState<string>("");
 
     useEffect(() => {
         async function loadCourses() {
@@ -60,9 +63,22 @@ export default function SearchPage() {
         setError(null);
         setRagAnswer(null);
         try {
+            const category =
+                componentFilter === "all" ? undefined : componentFilter;
+            const languageFilter =
+                componentFilter === "lab" && language.trim()
+                    ? language.trim()
+                    : undefined;
+
             const [docs, answer] = await Promise.all([
-                semanticSearchForCourse(query, courseId),
-                ragQueryForCourse(query, courseId),
+                semanticSearchForCourse(query, courseId, {
+                    category,
+                    language: languageFilter,
+                }),
+                ragQueryForCourse(query, courseId, {
+                    category,
+                    language: languageFilter,
+                }),
             ]);
             setResults(docs);
             setRagAnswer(answer);
