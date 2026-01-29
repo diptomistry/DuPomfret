@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import openai
 
@@ -10,6 +10,8 @@ from app.core.config import settings
 from app.core.supabase import supabase
 from app.rag.service import RAGService
 from app.ingest.service import IngestionService
+from app.courses.service import CourseService
+from app.materials.service import MaterialValidationService
 
 
 openai_client = openai.OpenAI(api_key=settings.openai_api_key)
@@ -21,6 +23,8 @@ class ChatService:
     def __init__(self) -> None:
         self.rag = RAGService()
         self.ingest = IngestionService()
+        self.courses = CourseService()
+        self.validator = MaterialValidationService()
 
     async def create_session(self, user_id: str, course_id: str) -> Dict[str, Any]:
         resp = (
@@ -122,6 +126,85 @@ class ChatService:
             traceback.print_exc()
             pass
 
+    def _detect_intent(self, message: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Lightweight intent detection for chat messages.
+
+        Returns:
+            (intent_type, payload)
+
+        intent_type:
+            - "qa": default RAG Q&A / explanation
+            - "generate_theory": generate theory material
+            - "generate_lab": generate lab material
+
+        payload:
+            - For generate_theory: { "topic": str, "depth": str, "format": str }
+            - For generate_lab: { "topic": str, "language": str }
+        """
+        text = (message or "").strip()
+        lower = text.lower()
+
+        def _extract_language() -> Optional[str]:
+            # Very simple language hint extraction: look for "in python", "in java", etc.
+            known_langs = ["python", "java", "c++", "javascript", "js", "typescript", "ts", "go"]
+            for lang in known_langs:
+                token = f"in {lang}"
+                if token in lower:
+                    # Normalize common aliases
+                    if lang in {"js", "typescript", "ts"}:
+                        return "javascript"
+                    return "c++" if lang == "c++" else lang
+            return None
+
+        # Heuristic: if user explicitly mentions "lab" + a generation verb, treat as lab generation
+        generation_verbs = ["generate", "create", "design", "write", "build", "make", "draft"]
+        has_generation_verb = any(v in lower for v in generation_verbs)
+        mentions_lab = any(k in lower for k in ["lab", "practical", "exercise", "assignment", "coding task"])
+        mentions_theory = any(k in lower for k in ["theory", "notes", "slides", "handout", "lecture"])
+
+        if has_generation_verb and mentions_lab:
+            language = _extract_language() or "python"
+            return (
+                "generate_lab",
+                {
+                    # Use full message as topic; generation service will use it for grounding/query
+                    "topic": text,
+                    "language": language,
+                },
+            )
+
+        if has_generation_verb and mentions_theory:
+            # Default to exam-oriented notes if user doesn't specify
+            depth = "exam-oriented"
+            fmt = "notes"
+            if "slides" in lower:
+                fmt = "slides"
+            elif "pdf" in lower or "handout" in lower:
+                fmt = "pdf"
+            return (
+                "generate_theory",
+                {
+                    "topic": text,
+                    "depth": depth,
+                    "format": fmt,
+                },
+            )
+
+        # Fallback: if user strongly hints at "generate X material" without saying theory/lab,
+        # prefer theory notes as a safe default.
+        if has_generation_verb and "material" in lower:
+            return (
+                "generate_theory",
+                {
+                    "topic": text,
+                    "depth": "exam-oriented",
+                    "format": "notes",
+                },
+            )
+
+        return "qa", {}
+
     async def chat(
         self,
         session_id: str,
@@ -146,13 +229,82 @@ class ChatService:
         # 1) First check if course content is embedded, trigger ingestion if needed
         await self.ensure_course_content_embedded(course_id)
 
-        # 2) Retrieve course-aware context via RAG service
-        # Increase top_k for more specific queries
+        # 2) Lightweight intent detection to support generation flows from chat
+        intent, intent_payload = self._detect_intent(message)
+
+        # If the user is asking to generate new theory or lab materials,
+        # route to the existing course generation services instead of generic Q&A.
+        if intent == "generate_theory":
+            print(f"[ChatService] Detected generate_theory intent for course {course_id}")
+            material = await self.courses.generate_theory_material(
+                course_id=course_id,
+                topic=intent_payload.get("topic", message),
+                depth=intent_payload.get("depth", "exam-oriented"),
+                format=intent_payload.get("format", "notes"),
+                week=None,
+                topic_filter=None,
+                created_by=user_id,
+            )
+
+            validation_result: Optional[Dict[str, Any]] = None
+            try:
+                validation_result = await self.validator.validate_material(material_id=str(material["id"]))
+            except Exception as e:
+                # Validation is best-effort; don't break chat if it fails
+                print(f"[ChatService] Validation failed for material {material.get('id')}: {str(e)}")
+
+            answer = material.get("output", "").strip()
+            if not answer:
+                answer = "The generation service returned an empty result. Please try rephrasing your request."
+
+            await self.append_message(session_id=session_id, role="assistant", content=answer)
+
+            return {
+                "answer": answer,
+                "sources": material.get("sources", []),
+                "mode": "generate_theory",
+                "material_id": str(material.get("id")),
+                "validation": validation_result,
+            }
+
+        if intent == "generate_lab":
+            print(f"[ChatService] Detected generate_lab intent for course {course_id}")
+            material = await self.courses.generate_lab_material(
+                course_id=course_id,
+                topic=intent_payload.get("topic", message),
+                language=intent_payload.get("language", "python"),
+                week=None,
+                topic_filter=None,
+                created_by=user_id,
+            )
+
+            validation_result: Optional[Dict[str, Any]] = None
+            try:
+                validation_result = await self.validator.validate_material(material_id=str(material["id"]))
+            except Exception as e:
+                print(f"[ChatService] Validation failed for material {material.get('id')}: {str(e)}")
+
+            answer = material.get("output", "").strip()
+            if not answer:
+                answer = "The lab generation service returned an empty result. Please try rephrasing your request or specifying the language."
+
+            await self.append_message(session_id=session_id, role="assistant", content=answer)
+
+            return {
+                "answer": answer,
+                "sources": material.get("sources", []),
+                "mode": "generate_lab",
+                "material_id": str(material.get("id")),
+                "validation": validation_result,
+            }
+
+        # 3) Default path: RAG-backed Q&A / explanation
+        # Retrieve course-aware context via RAG service
         top_k = 6
-        if any(keyword in message.lower() for keyword in ['part', 'section', 'chapter', 'specific', 'explain']):
+        if any(keyword in message.lower() for keyword in ["part", "section", "chapter", "specific", "explain"]):
             top_k = 12  # Get more chunks for specific queries
             print(f"Detected specific query, increasing top_k to {top_k}")
-        
+
         rag_result = await self.rag.query_for_course(
             course_id=course_id,
             question=message,
@@ -161,13 +313,19 @@ class ChatService:
             language=None,
             top_k=top_k,
         )
-        
+
         # Debug: Check what we got from RAG
         print(f"RAG result sources count: {len(rag_result.get('sources', []))}")
         if not rag_result.get("sources"):
             print(f"No RAG sources found for course_id: {course_id}, message: {message}")
             # Check if documents exist in the database
-            doc_check = supabase.table("documents").select("id").eq("namespace", course_id).limit(5).execute()
+            doc_check = (
+                supabase.table("documents")
+                .select("id")
+                .eq("namespace", course_id)
+                .limit(5)
+                .execute()
+            )
             print(f"Documents in DB for this course: {len(doc_check.data) if doc_check.data else 0}")
 
         # Build a conversational prompt that includes brief history
@@ -238,9 +396,11 @@ class ChatService:
         # Persist assistant message
         await self.append_message(session_id=session_id, role="assistant", content=answer)
 
-        # Return the full RAG result (includes answer and sources)
         return {
             "answer": answer,
             "sources": rag_result.get("sources", []),
+            "mode": "qa",
+            "material_id": None,
+            "validation": None,
         }
 

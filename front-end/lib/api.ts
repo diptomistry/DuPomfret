@@ -257,6 +257,7 @@ export interface SearchResult {
   snippet: string;
   source: string;
   component: CourseComponent;
+  url?: string;
 }
 
 export interface GeneratedContent {

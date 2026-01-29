@@ -17,7 +17,7 @@ import {
 } from "@/lib/api";
 import { listCourses, type Course } from "@/lib/courses-api";
 import { BEARER_TOKEN_STORAGE_KEY } from "@/lib/constants";
-import { Combobox, Option } from "@/components/ui/Combobox";
+import { Select } from "@/components/ui/select";
 import { Search, FileText, Sparkles, Loader2 } from "lucide-react";
 
 export default function SearchPage() {
@@ -100,10 +100,10 @@ export default function SearchPage() {
                     <div className="page-stack">
                         {/* Header */}
                         <div className="page-header">
-                            <h1 className="page-title">AI Search</h1>
-                            <p className="page-description">
-                                Ask questions in plain English to find relevant
-                                documents and code from your course.
+                            <h1 className="page-title text-3xl sm:text-4xl font-bold mb-2">AI Search</h1>
+                            <p className="page-description text-lg leading-relaxed mb-6 max-w-3xl">
+                                Ask questions in plain English to find relevant documents, code snippets, and lab materials from your course.
+                                Results are retrieved using semantic search and summarized with RAG. Use the filters to scope to labs, select language, or pick a course.
                             </p>
                         </div>
 
@@ -117,7 +117,7 @@ export default function SearchPage() {
                             </CardHeader>
                             <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-6 pt-0">
                                 <form
-                                    className="flex flex-col gap-2 sm:gap-3 sm:flex-row"
+                                    className="flex flex-col gap-2 sm:gap-3 sm:flex-row items-center"
                                     onSubmit={handleSearch}
                                 >
                                     <Input
@@ -127,42 +127,84 @@ export default function SearchPage() {
                                         }
                                         placeholder="e.g. Explain quicksort vs mergesort"
                                         disabled={isSearching}
-                                        className="flex-1 text-sm"
+                                        className="flex-1 text-sm h-12"
                                     />
-                                    <div className="w-48">
-                                        <label className="sr-only">Course</label>
-                                        <Combobox
-                                            options={[
-                                                { value: "", label: loadingCourses ? "Loading..." : "All courses" },
-                                                ...courses.map((c) => ({
-                                                    value: c.id,
-                                                    label: `${c.code} — ${c.title}`,
-                                                })),
-                                            ] as Option<Course>[]}
-                                            value={courseId ?? ""}
-                                            onChange={(v) => setCourseId(v || undefined)}
-                                            disabled={isSearching || loadingCourses}
-                                            placeholder="All courses"
+
+                                    {/* Scope & Filters */}
+                                    <div className="flex items-center gap-2">
+                                        <select
+                                            value={componentFilter}
+                                            onChange={(e) =>
+                                                setComponentFilter(
+                                                    e.target.value as
+                                                        | "all"
+                                                        | "lab"
+                                                        | "theory"
+                                                )
+                                            }
+                                            disabled={isSearching}
+                                            className="h-12 rounded-lg border px-3 text-sm"
+                                            aria-label="Component filter"
+                                        >
+                                            <option value="all">All</option>
+                                            <option value="lab">Lab</option>
+                                            <option value="theory">Theory</option>
+                                        </select>
+
+                                        <Input
+                                            value={language}
+                                            onChange={(e) =>
+                                                setLanguage(e.target.value)
+                                            }
+                                            placeholder="Language (e.g. python)"
+                                            disabled={isSearching || componentFilter !== "lab"}
+                                            className="w-40 text-sm h-12"
                                         />
+
+                                        <div className="w-48">
+                                            <label className="sr-only">Course</label>
+                                            <Select
+                                                value={courseId ?? ""}
+                                                onChange={(e) => setCourseId(e.target.value || undefined)}
+                                                disabled={isSearching || loadingCourses}
+                                                className="h-12 text-base w-full rounded-lg"
+                                            >
+                                                <option value="">{loadingCourses ? "Loading..." : "All courses"}</option>
+                                                {courses.map((c) => (
+                                                    <option key={c.id} value={c.id}>
+                                                        {c.code} — {c.title}
+                                                    </option>
+                                                ))}
+                                            </Select>
+                                        </div>
+
+                                        <div className="ml-2">
+                                            <Button
+                                                type="submit"
+                                                disabled={isSearching}
+                                                size="lg"
+                                                className="gap-2"
+                                            >
+                                                {isSearching ? (
+                                                    <>
+                                                        <Loader2 className="size-4 animate-spin" />
+                                                        Searching...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Search className="size-4" />
+                                                        Search
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
                                     </div>
-                                    <Button
-                                        type="submit"
-                                        disabled={isSearching}
-                                        className="gap-2 w-full sm:w-auto"
-                                    >
-                                        {isSearching ? (
-                                            <>
-                                                <Loader2 className="size-4 animate-spin" />
-                                                Searching...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Search className="size-4" />
-                                                Find Results
-                                            </>
-                                        )}
-                                    </Button>
                                 </form>
+                                <div className="mt-3">
+                                    <p className="text-sm text-muted-foreground">
+                                        Try queries like: "explain nop sled", "merge sort complexity", or "example buffer overflow exploit".
+                                    </p>
+                                </div>
                                 {error && <ErrorState message={error} />}
                             </CardContent>
                         </Card>
@@ -253,6 +295,15 @@ export default function SearchPage() {
                                                 <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4">
                                                     {r.snippet}
                                                 </p>
+                                        <div className="mt-3 flex justify-end">
+                                            {r.url ? (
+                                                <Button asChild size="sm" variant="outline">
+                                                    <a href={r.url} target="_blank" rel="noopener noreferrer">
+                                                        View file
+                                                    </a>
+                                                </Button>
+                                            ) : null}
+                                        </div>
                                             </div>
                                         ))
                                     )}

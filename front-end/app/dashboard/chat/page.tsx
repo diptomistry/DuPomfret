@@ -58,6 +58,14 @@ interface Message {
     sources?: Source[];
     images?: string[]; // Array of image URLs or base64 strings
     createdAt: string;
+    mode?: "qa" | "generate_theory" | "generate_lab";
+    materialId?: string;
+    validation?: {
+        syntax: string;
+        grounding_score?: number | null;
+        tests_passed: boolean;
+        final_verdict: string;
+    };
 }
 
 interface ChatSession {
@@ -395,6 +403,9 @@ export default function ChatPage() {
                 role: "assistant",
                 content: data.answer,
                 sources: data.sources || [],
+                mode: data.mode || "qa",
+                materialId: data.material_id || undefined,
+                validation: data.validation || undefined,
                 createdAt: new Date().toISOString(),
             };
 
@@ -719,6 +730,58 @@ export default function ChatPage() {
                                                                     )}
                                                                 </div>
                                                             )}
+
+                                                            {/* Mode & validation metadata for generated materials */}
+                                                            {m.role ===
+                                                                "assistant" &&
+                                                                m.mode &&
+                                                                m.mode !==
+                                                                    "qa" && (
+                                                                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                                                        <Badge
+                                                                            variant={
+                                                                                m.mode ===
+                                                                                "generate_lab"
+                                                                                    ? "lab"
+                                                                                    : "theory"
+                                                                            }
+                                                                            className="px-2 py-0 text-[10px] uppercase tracking-wide"
+                                                                        >
+                                                                            {m.mode ===
+                                                                            "generate_lab"
+                                                                                ? "Generated lab material"
+                                                                                : "Generated theory material"}
+                                                                        </Badge>
+                                                                        {m.validation && (
+                                                                            <span>
+                                                                                Validation:{" "}
+                                                                                <span className="font-semibold">
+                                                                                    {
+                                                                                        m
+                                                                                            .validation
+                                                                                            .final_verdict
+                                                                                    }
+                                                                                </span>
+                                                                                {typeof m
+                                                                                    .validation
+                                                                                    .grounding_score ===
+                                                                                    "number" && (
+                                                                                    <span>
+                                                                                        {" "}
+                                                                                        • grounding{" "}
+                                                                                        {Math.round(
+                                                                                            m
+                                                                                                .validation
+                                                                                                .grounding_score *
+                                                                                                100,
+                                                                                        )}
+                                                                                        %
+                                                                                    </span>
+                                                                                )}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
 
                                                             {/* Sources Button */}
                                                             {m.role ===

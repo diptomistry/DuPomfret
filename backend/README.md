@@ -625,3 +625,139 @@ If vector search is slow, ensure you've run the `match_documents` function from 
 ## License
 
 MIT
+
+## Conversational Course Chat (Part 5)
+
+This backend exposes a course-scoped conversational tutor that combines semantic search, content generation, and validation.
+
+### Chat Endpoints
+
+- **Create session** – `POST /chat/session`
+
+  ```json
+  {
+    "course_id": "course-uuid"
+  }
+  ```
+
+  Response:
+
+  ```json
+  {
+    "id": "session-uuid",
+    "user_id": "user-uuid",
+    "course_id": "course-uuid"
+  }
+  ```
+
+- **Send message** – `POST /chat/{session_id}`
+
+  ```json
+  {
+    "message": "Explain AVL tree rotations"
+  }
+  ```
+
+  Response (simplified):
+
+  ```json
+  {
+    "answer": "...markdown answer...",
+    "sources": [
+      {
+        "content": "...",
+        "metadata": { "source": "week3-slides.pdf", "topic": "AVL Trees" }
+      }
+    ],
+    "mode": "qa",
+    "material_id": null,
+    "validation": null
+  }
+  ```
+
+### Generation via Chat
+
+The chat service performs lightweight intent detection and routes generation-style prompts to the existing course generation services:
+
+- **Theory generation** (internally uses `/courses/{course_id}/generate/theory`)
+
+  Example prompts:
+
+  - `"Generate theory notes on dynamic programming for shortest paths"`
+  - `"Create slides about AVL tree rotations"`
+
+  Response:
+
+  ```json
+  {
+    "answer": "...generated theory material...",
+    "sources": [...],
+    "mode": "generate_theory",
+    "material_id": "generated-material-uuid",
+    "validation": {
+      "syntax": "pass",
+      "grounding_score": 0.82,
+      "tests_passed": false,
+      "final_verdict": "ready_for_students"
+    }
+  }
+  ```
+
+- **Lab generation** (internally uses `/courses/{course_id}/generate/lab`)
+
+  Example prompts:
+
+  - `"Generate a lab exercise on Dijkstra's algorithm in Python"`
+  - `"Create a coding assignment about hash tables in Java"`
+
+  The chat service infers `language` from phrases like `"in python"` or `"in java"` (default: `"python"`).
+
+  Response has `mode: "generate_lab"` and a `material_id` pointing to the stored `generated_materials` row.
+
+### Grounding & Validation Strategy
+
+- **Grounding / Retrieval**
+  - All chat answers (Q&A and generation) are grounded in course materials stored in Supabase and indexed with pgvector.
+  - For Q&A, `ChatService` calls `RAGService.query_for_course()` using the course namespace and injects retrieved chunks (slides, PDFs, notes, code) into the LLM prompt as `[Source 1] ...` snippets.
+  - For generation, `CourseService._retrieve_generation_context()` selects high-similarity, course-scoped chunks and filters out previously generated outputs to avoid self-reinforcement. Generated theory/lab materials include a `sources` array with these excerpts.
+
+- **Validation**
+  - Generated materials are validated via `MaterialValidationService.validate_material()` and surfaced both through:
+    - `POST /materials/{material_id}/validate` (explicit validation API), and
+    - the chat generation path (chat automatically runs validation after generating theory/lab).
+  - Validation pipeline:
+    1. Re-retrieves grounded context from course materials.
+    2. Asks an LLM to judge syntax, grounding, and (for labs) simple testability.
+    3. Stores a compact report in `validation_reports` with `passed` + `feedback`.
+    4. Returns a JSON summary:
+
+       ```json
+       {
+         "syntax": "pass",
+         "grounding_score": 0.82,
+         "tests_passed": true,
+         "final_verdict": "ready_for_students"
+       }
+       ```
+
+- **Conversation Context**
+  - For each `POST /chat/{session_id}` call, the last N messages from `chat_messages` are included in the prompt as a conversational history block.
+  - This enables contextual follow-up questions (for example, `"Can you give me a lab for that topic in Java instead?"`).
+
+### Sample Chat Interactions
+
+- **Search / Explanation**
+
+  - User: `"Summarize week 3 theory slides on AVL trees."`
+  - Behavior: RAG search over course contents + LLM explanation, `mode: "qa"`.
+
+- **Theory Generation**
+
+  - User: `"Generate exam-oriented theory notes on dynamic programming for shortest paths."`
+  - Behavior: Routed to theory generator, grounded in course materials, validated; `mode: "generate_theory"`.
+
+- **Lab Generation with Language**
+
+  - User: `"Create a lab assignment on binary search trees in Python."`
+  - Behavior: Routed to lab generator with `language="python"`, validated; `mode: "generate_lab"`.
+
