@@ -13,6 +13,7 @@ import {
     CardDescription,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select } from "@/components/ui/select";
 import {
     MessageCircle,
     Send,
@@ -27,6 +28,8 @@ import {
     Sparkles,
     Paperclip,
     X,
+    PlusCircle,
+    Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -53,24 +56,161 @@ interface Message {
     createdAt: string;
 }
 
+interface ChatSession {
+    id: string;
+    title: string;
+    messages: Message[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+interface Course {
+    id: string;
+    code: string;
+    title: string;
+    description?: string;
+}
+
 export default function ChatPage() {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [sessions, setSessions] = useState<ChatSession[]>([]);
+    const [currentSessionId, setCurrentSessionId] = useState<string | null>(
+        null,
+    );
     const [input, setInput] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedSources, setSelectedSources] = useState<Source[]>([]);
-    const [courseId, setCourseId] = useState<string>("default_course"); // Replace with actual course selection
+    const [courses, setCourses] = useState<Course[]>([]);
+    const [courseId, setCourseId] = useState<string>("");
     const [uploadedImages, setUploadedImages] = useState<string[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Get current session and messages
+    const currentSession = sessions.find((s) => s.id === currentSessionId);
+    const messages = currentSession?.messages || [];
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    // Load sessions from localStorage on mount
+    useEffect(() => {
+        const saved = localStorage.getItem("chatSessions");
+        if (saved) {
+            const loadedSessions = JSON.parse(saved);
+            setSessions(loadedSessions);
+            if (loadedSessions.length > 0) {
+                setCurrentSessionId(loadedSessions[0].id);
+            }
+        } else {
+            // Create initial session
+            createNewSession();
+        }
+
+        // Fetch available courses
+        fetchCourses();
+    }, []);
+
+    const fetchCourses = async () => {
+        try {
+            const supabase = createClient();
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+
+            if (!session) {
+                console.error("Not authenticated");
+                return;
+            }
+
+            const apiUrl =
+                process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+            const response = await fetch(`${apiUrl}/courses`, {
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setCourses(data);
+                // Set first course as default
+                if (data.length > 0) {
+                    setCourseId(data[0].id);
+                }
+            } else {
+                console.error("Failed to fetch courses:", response.status);
+            }
+        } catch (err) {
+            console.error("Error fetching courses:", err);
+        }
+    };
+
+    // Save sessions to localStorage whenever they change
+    useEffect(() => {
+        if (sessions.length > 0) {
+            localStorage.setItem("chatSessions", JSON.stringify(sessions));
+        }
+    }, [sessions]);
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    const createNewSession = () => {
+        const newSession: ChatSession = {
+            id: crypto.randomUUID(),
+            title: "New Chat",
+            messages: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        setSessions((prev) => [newSession, ...prev]);
+        setCurrentSessionId(newSession.id);
+    };
+
+    const deleteSession = (sessionId: string) => {
+        setSessions((prev) => {
+            const filtered = prev.filter((s) => s.id !== sessionId);
+            if (filtered.length === 0) {
+                createNewSession();
+                return filtered;
+            }
+            if (sessionId === currentSessionId) {
+                setCurrentSessionId(filtered[0].id);
+            }
+            return filtered;
+        });
+    };
+
+    const updateSessionTitle = (sessionId: string, firstMessage: string) => {
+        setSessions((prev) =>
+            prev.map((s) =>
+                s.id === sessionId
+                    ? {
+                          ...s,
+                          title: firstMessage.slice(0, 50),
+                          updatedAt: new Date().toISOString(),
+                      }
+                    : s,
+            ),
+        );
+    };
+
+    const addMessageToSession = (sessionId: string, message: Message) => {
+        setSessions((prev) =>
+            prev.map((s) =>
+                s.id === sessionId
+                    ? {
+                          ...s,
+                          messages: [...s.messages, message],
+                          updatedAt: new Date().toISOString(),
+                      }
+                    : s,
+            ),
+        );
+    };
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -102,6 +242,21 @@ export default function ChatPage() {
         setUploadedImages([]);
         setError(null);
 
+        // Ensure we have a session
+        let sessionId = currentSessionId;
+        if (!sessionId) {
+            const newSession: ChatSession = {
+                id: crypto.randomUUID(),
+                title: "New Chat",
+                messages: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            setSessions((prev) => [newSession, ...prev]);
+            setCurrentSessionId(newSession.id);
+            sessionId = newSession.id;
+        }
+
         const userMessage: Message = {
             id: crypto.randomUUID(),
             role: "user",
@@ -110,7 +265,12 @@ export default function ChatPage() {
             createdAt: new Date().toISOString(),
         };
 
-        setMessages((prev) => [...prev, userMessage]);
+        addMessageToSession(sessionId, userMessage);
+
+        // Update session title if it's the first message
+        if (messages.length === 0 && content) {
+            updateSessionTitle(sessionId, content);
+        }
         setIsSending(true);
 
         try {
@@ -135,6 +295,13 @@ export default function ChatPage() {
             // Call RAG search endpoint
             const apiUrl =
                 process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
+            console.log(
+                "Making request to:",
+                `${apiUrl}/courses/${courseId}/search`,
+            );
+            console.log("Course ID:", courseId);
+            console.log("Query:", content || "Analyze these images");
 
             // Prepare request body with images
             const requestBody: any = {
@@ -182,12 +349,20 @@ export default function ChatPage() {
                 createdAt: new Date().toISOString(),
             };
 
-            setMessages((prev) => [...prev, assistantMessage]);
+            addMessageToSession(sessionId, assistantMessage);
+
             if (data.sources && data.sources.length > 0) {
                 setSelectedSources(data.sources);
             }
         } catch (err) {
             console.error("Chat error:", err);
+            console.error("Error details:", {
+                courseId,
+                apiUrl:
+                    process.env.NEXT_PUBLIC_API_BASE_URL ||
+                    "http://localhost:8000",
+                endpoint: `/courses/${courseId}/search`,
+            });
             const errorMessage =
                 err instanceof Error
                     ? err.message
@@ -238,7 +413,7 @@ export default function ChatPage() {
                                 Ask questions about your course materials and
                                 get AI-powered answers with source references
                             </p>
-                            <div className="flex flex-wrap gap-2 pt-2">
+                            <div className="flex flex-wrap gap-2 pt-2 items-center">
                                 <Badge variant="primary" className="gap-1">
                                     <Sparkles className="size-3" />
                                     RAG-Powered
@@ -247,11 +422,109 @@ export default function ChatPage() {
                                     <FileText className="size-3" />
                                     Source Grounded
                                 </Badge>
+
+                                {/* Course Selection */}
+                                <div className="flex items-center gap-2 ml-auto">
+                                    <label className="text-xs text-muted-foreground">
+                                        Course:
+                                    </label>
+                                    <Select
+                                        value={courseId}
+                                        onChange={(e) =>
+                                            setCourseId(e.target.value)
+                                        }
+                                        className="h-8 w-64 text-xs"
+                                    >
+                                        {courses.length === 0 ? (
+                                            <option value="" disabled>
+                                                No courses available
+                                            </option>
+                                        ) : (
+                                            courses.map((course) => (
+                                                <option
+                                                    key={course.id}
+                                                    value={course.id}
+                                                >
+                                                    {course.code} -{" "}
+                                                    {course.title}
+                                                </option>
+                                            ))
+                                        )}
+                                    </Select>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Main Content Grid */}
-                        <div className="grid gap-4 lg:grid-cols-[1fr,400px] xl:grid-cols-[1fr,450px]">
+                        {/* Main Content Grid - 3 Column Layout */}
+                        <div className="grid gap-4 lg:grid-cols-[280px,1fr,380px] xl:grid-cols-[300px,1fr,420px]">
+                            {/* Chat History Sidebar */}
+                            <Card className="border-2 max-h-[600px] flex flex-col overflow-hidden">
+                                <CardHeader className="border-b border-border/40 pb-4">
+                                    <Button
+                                        onClick={createNewSession}
+                                        className="w-full gap-2"
+                                        size="sm"
+                                    >
+                                        <PlusCircle className="size-4" />
+                                        New Chat
+                                    </Button>
+                                </CardHeader>
+                                <CardContent className="flex-1 overflow-auto p-2 space-y-1">
+                                    {sessions.length === 0 ? (
+                                        <div className="text-center py-8 text-sm text-muted-foreground">
+                                            No chats yet
+                                        </div>
+                                    ) : (
+                                        sessions.map((session) => (
+                                            <div
+                                                key={session.id}
+                                                className={cn(
+                                                    "group flex items-center gap-2 rounded-lg p-3 cursor-pointer transition-colors",
+                                                    session.id ===
+                                                        currentSessionId
+                                                        ? "bg-primary/10 border border-primary/30"
+                                                        : "hover:bg-muted border border-transparent",
+                                                )}
+                                                onClick={() =>
+                                                    setCurrentSessionId(
+                                                        session.id,
+                                                    )
+                                                }
+                                            >
+                                                <MessageCircle className="size-4 shrink-0 text-muted-foreground" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium truncate">
+                                                        {session.title}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {
+                                                            session.messages
+                                                                .length
+                                                        }{" "}
+                                                        messages
+                                                    </p>
+                                                </div>
+                                                {sessions.length > 1 && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="size-6 opacity-0 group-hover:opacity-100 shrink-0"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            deleteSession(
+                                                                session.id,
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Trash2 className="size-3 text-destructive" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
+                                </CardContent>
+                            </Card>
+
                             {/* Chat Card */}
                             <Card className="flex min-h-[600px] flex-col overflow-hidden border-2">
                                 <CardHeader className="border-b border-border/40 pb-4">
@@ -679,27 +952,6 @@ export default function ChatPage() {
                                 </CardContent>
                             </Card>
                         </div>
-
-                        {/* Info Card */}
-                        <Card className="border-2 border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-purple-500/5">
-                            <CardContent className="flex flex-col sm:flex-row items-center gap-6 py-8">
-                                <div className="flex-shrink-0 rounded-2xl bg-gradient-to-br from-primary to-purple-500 p-4 shadow-xl shadow-primary/25">
-                                    <Sparkles className="size-8 text-white" />
-                                </div>
-                                <div className="text-center sm:text-left space-y-2">
-                                    <h3 className="text-lg font-bold text-foreground">
-                                        Powered by RAG Technology
-                                    </h3>
-                                    <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-                                        All answers are grounded in your
-                                        uploaded course materials using
-                                        Retrieval-Augmented Generation. Each
-                                        response includes source references for
-                                        transparency and verification.
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
                     </div>
                 </div>
             </AppShell>
