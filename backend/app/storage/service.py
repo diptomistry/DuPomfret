@@ -108,3 +108,28 @@ class CloudflareUploadService:
             size_bytes=size_bytes,
         )
 
+    def delete_object_by_url(self, file_url: str) -> bool:
+        """
+        Delete an object from R2 using its public URL.
+        Returns True if deletion request succeeded, False otherwise.
+        """
+        public_base = self.r2_public_base_url.rstrip("/")
+        if not file_url.startswith(public_base):
+            # Can't determine key from URL
+            return False
+        # Extract key portion
+        key = file_url[len(public_base):].lstrip("/")
+
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=self.r2_endpoint,
+            aws_access_key_id=self.r2_access_key_id,
+            aws_secret_access_key=self.r2_secret_access_key,
+            region_name="auto",
+        )
+        try:
+            s3.delete_object(Bucket=self.r2_bucket, Key=key)
+            return True
+        except Exception:
+            return False
+

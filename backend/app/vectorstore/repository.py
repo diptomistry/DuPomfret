@@ -224,6 +224,21 @@ class VectorRepository:
         return results[:top_k]
     
     @staticmethod
+    def delete_documents_by_content_id(namespace: str, content_id: str) -> int:
+        """
+        Delete documents associated with a specific course content id within a namespace.
+
+        Returns the number of rows deleted (if provider returns that info) or 0 otherwise.
+        """
+        try:
+            resp = supabase.table("documents").delete().contains("metadata", {"content_id": str(content_id)}).eq("namespace", namespace).execute()
+            if resp and getattr(resp, "data", None):
+                return len(resp.data)
+        except Exception:
+            pass
+        return 0
+    
+    @staticmethod
     def create_vector_search_function():
         """
         Helper method to document the SQL function needed for efficient vector search.

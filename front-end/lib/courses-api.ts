@@ -135,6 +135,15 @@ export async function ingestCourseContent(
   return handleResponse<IngestResponse>(res);
 }
 
+/** Delete a course content item (admin only). */
+export async function deleteCourseContent(token: string, contentId: string): Promise<{ message: string; deleted_documents: number; storage_deleted: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/admin/content/${contentId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  return handleResponse<any>(res);
+}
+
 /** Upload file to storage (returns public URL for use in ingest). Auth required. */
 export async function uploadFile(
   token: string,

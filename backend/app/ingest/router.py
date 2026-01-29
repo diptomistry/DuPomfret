@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 
 from app.core.auth import User, get_current_user, require_admin
 from app.ingest.service import IngestionService
+from app.vectorstore.repository import VectorRepository
+from app.core.supabase import supabase
+from app.storage.service import CloudflareUploadService
 
 
 router = APIRouter(prefix="/admin/content", tags=["ingest"])
@@ -88,3 +91,57 @@ async def ingest_course_content(
         chunks=result["chunks"],
         content_id=result["content_id"],
     )
+
+
+
+@router.delete("/{content_id}", status_code=status.HTTP_200_OK)
+async def delete_course_content(
+    content_id: str,
+    current_user: User = Depends(require_admin),
+):
+    """
+    Delete a course content item and its associated documents (admin-only).
+    Also attempts to delete the underlying file from storage when possible.
+    """
+    # 1) Fetch the content row
+    try:
+        resp = supabase.table("course_contents").select("*").eq("id", content_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+
+    if not resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content not found")
+
+    row = resp.data[0]
+    course_id = row.get("course_id")
+    file_url = row.get("file_url")
+
+    # 2) Delete documents for that content_id within the namespace (course_id)
+    deleted_docs = 0
+    try:
+        vr = VectorRepository()
+        deleted_docs = vr.delete_documents_by_content_id(namespace=course_id, content_id=str(content_id))
+    except Exception:
+        # continue even if vector deletion fails
+        deleted_docs = 0
+
+    # 3) Delete CMS row
+    try:
+        supabase.table("course_contents").delete().eq("id", content_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to delete content row: {str(e)}")
+
+    # 4) Attempt to delete file from storage (best-effort)
+    storage_deleted = False
+    try:
+        if file_url:
+            storage = CloudflareUploadService()
+            storage_deleted = storage.delete_object_by_url(file_url)
+    except Exception:
+        storage_deleted = False
+
+    return {
+        "message": "Deleted content",
+        "deleted_documents": deleted_docs,
+        "storage_deleted": storage_deleted,
+    }

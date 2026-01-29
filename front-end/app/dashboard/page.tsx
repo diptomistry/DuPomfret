@@ -23,7 +23,6 @@ import {
     ArrowRight,
     Lightbulb,
     Rocket,
-    Bot,
     PenTool,
 } from "lucide-react";
 
@@ -87,18 +86,6 @@ const features = [
         action: "Start Chat",
         gradient: "from-rose-500 to-pink-400",
         shadowColor: "hover:shadow-rose-500/20",
-    },
-    {
-        title: "Live AI Tutor",
-        description:
-            "Connect with AI-powered tutors for personalized learning sessions.",
-        href: ROUTES.DASHBOARD_ASSISTANT,
-        icon: Bot,
-        badge: "Live",
-        badgeVariant: "primary" as const,
-        action: "Start Session",
-        gradient: "from-violet-500 to-purple-400",
-        shadowColor: "hover:shadow-violet-500/20",
     },
     {
         title: "Handwritten Notes",

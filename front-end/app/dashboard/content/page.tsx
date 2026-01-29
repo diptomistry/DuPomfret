@@ -28,6 +28,7 @@ import {
   type CourseContent,
   type IngestRequest,
 } from "@/lib/courses-api";
+import { deleteCourseContent } from "@/lib/courses-api";
 import { ROUTES } from "@/lib/constants";
 import {
   FileText,
@@ -47,6 +48,7 @@ import {
   RefreshCw,
   Eye,
 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { atomOneLight } from "react-syntax-highlighter/dist/esm/styles/hljs";
 
@@ -277,6 +279,23 @@ function ContentPageInner() {
       setError(err instanceof Error ? err.message : "Failed to add material.");
     } finally {
       setIngestSubmitting(false);
+    }
+  }
+
+  async function handleDeleteContent(content: CourseContent) {
+    if (!token) {
+      setError("Not signed in.");
+      return;
+    }
+    if (!confirm(`Delete ${content.title}? This will remove the content and its indexed documents.`)) return;
+    try {
+      setError(null);
+      await deleteCourseContent(token, content.id);
+      // refresh list
+      await loadContents();
+      closeViewer();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete content.");
     }
   }
 
@@ -578,7 +597,7 @@ function ContentPageInner() {
                               )}
                               {/* View button aligned with badges for consistent header placement */}
                               {m.file_url && (
-                                <div className="ml-3 flex items-center">
+                                <div className="ml-3 flex items-center gap-2">
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -589,6 +608,18 @@ function ContentPageInner() {
                                     <Eye className="size-4" />
                                     <span className="hidden sm:inline">View</span>
                                   </Button>
+                                  {role === "admin" && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleDeleteContent(m)}
+                                      className="inline-flex items-center gap-2 text-xs h-8 px-3 text-destructive"
+                                      aria-label={`Delete ${m.title}`}
+                                    >
+                                      <Trash2 className="size-4" />
+                                      <span className="hidden sm:inline">Delete</span>
+                                    </Button>
+                                  )}
                                 </div>
                               )}
                             </div>
