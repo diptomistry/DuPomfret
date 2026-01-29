@@ -8,6 +8,7 @@ export const ROUTES = {
   DASHBOARD_GENERATE: "/dashboard/generate",
   DASHBOARD_VALIDATE: "/dashboard/validate",
   DASHBOARD_CHAT: "/dashboard/chat",
+  DASHBOARD_ASSISTANT: "/dashboard/assistant",
 } as const;
 
 export const THEME_STORAGE_KEY = "theme";

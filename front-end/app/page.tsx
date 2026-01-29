@@ -71,14 +71,12 @@ export default async function HomePage() {
                     <div className="mx-auto max-w-7xl">
                         <div className="mx-auto mb-12 max-w-2xl text-center lg:mb-16">
                             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                                Everything you need to{" "}
                                 <span className="bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-                                    learn smarter
+                                    Features
                                 </span>
                             </h2>
                             <p className="mt-4 text-lg text-muted-foreground">
-                                Powerful AI tools designed specifically for
-                                university students.
+                                Powerful AI tools for your coursework.
                             </p>
                         </div>
 
@@ -125,11 +123,10 @@ export default async function HomePage() {
                             <div className="absolute inset-0 bg-grid-white/5 [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)]" />
                             <GraduationCap className="relative mx-auto mb-6 size-12 text-primary" />
                             <h2 className="relative text-2xl font-bold sm:text-3xl lg:text-4xl">
-                                Ready to ace your courses?
+                                Ready to get started?
                             </h2>
                             <p className="relative mx-auto mt-4 max-w-lg text-muted-foreground">
-                                Join students who are already learning smarter
-                                with AI-powered study tools.
+                                Sign in to access your course companion.
                             </p>
                             <Button
                                 asChild
@@ -137,7 +134,7 @@ export default async function HomePage() {
                                 className="relative mt-8 h-12 px-8 text-base font-semibold shadow-xl shadow-primary/25"
                             >
                                 <Link href={ROUTES.LOGIN}>
-                                    Start Learning Now
+                                    Get Started
                                     <ArrowRight className="ml-2 size-5" />
                                 </Link>
                             </Button>
@@ -148,8 +145,7 @@ export default async function HomePage() {
                 {/* Footer */}
                 <footer className="border-t border-border/50 px-4 py-8 text-center sm:px-6">
                     <p className="text-sm text-muted-foreground">
-                        Built for students who want to learn smarter, not
-                        harder.
+                        Orion - Your intelligent course companion
                     </p>
                 </footer>
             </main>
