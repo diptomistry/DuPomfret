@@ -1,6 +1,6 @@
-"use client";
+ "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,7 @@ import {
 } from "@/lib/api";
 import { listCourses, type Course } from "@/lib/courses-api";
 import { BEARER_TOKEN_STORAGE_KEY } from "@/lib/constants";
-import { useEffect } from "react";
-import Combobox, { Option } from "@/components/ui/Combobox";
+import { Combobox, Option } from "@/components/ui/Combobox";
 import { Search, FileText, Sparkles, Loader2 } from "lucide-react";
 
 export default function SearchPage() {
@@ -26,7 +25,9 @@ export default function SearchPage() {
     const [courseId, setCourseId] = useState<string | undefined>(undefined);
     const [courses, setCourses] = useState<Course[]>([]);
     const [loadingCourses, setLoadingCourses] = useState(false);
-    const [componentFilter, setComponentFilter] = useState<"all" | "theory" | "lab">("all");
+    const [componentFilter, setComponentFilter] = useState<
+        "all" | "lab" | "theory"
+    >("all");
     const [language, setLanguage] = useState<string>("");
 
     useEffect(() => {
@@ -116,103 +117,51 @@ export default function SearchPage() {
                             </CardHeader>
                             <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-6 pt-0">
                                 <form
-                                    className="flex flex-col gap-3 sm:gap-3"
+                                    className="flex flex-col gap-2 sm:gap-3 sm:flex-row"
                                     onSubmit={handleSearch}
                                 >
-                                    <div className="flex flex-col gap-2 sm:flex-row">
-                                        <Input
-                                            value={query}
-                                            onChange={(e) =>
-                                                setQuery(e.target.value)
-                                            }
-                                            placeholder="e.g. Explain quicksort vs mergesort"
-                                            disabled={isSearching}
-                                            className="flex-1 text-sm"
+                                    <Input
+                                        value={query}
+                                        onChange={(e) =>
+                                            setQuery(e.target.value)
+                                        }
+                                        placeholder="e.g. Explain quicksort vs mergesort"
+                                        disabled={isSearching}
+                                        className="flex-1 text-sm"
+                                    />
+                                    <div className="w-48">
+                                        <label className="sr-only">Course</label>
+                                        <Combobox
+                                            options={[
+                                                { value: "", label: loadingCourses ? "Loading..." : "All courses" },
+                                                ...courses.map((c) => ({
+                                                    value: c.id,
+                                                    label: `${c.code} — ${c.title}`,
+                                                })),
+                                            ] as Option<Course>[]}
+                                            value={courseId ?? ""}
+                                            onChange={(v) => setCourseId(v || undefined)}
+                                            disabled={isSearching || loadingCourses}
+                                            placeholder="All courses"
                                         />
-                                        <div className="w-48">
-                                            <label className="sr-only">Course</label>
-                                            <Combobox
-                                                options={[
-                                                    { value: "", label: loadingCourses ? "Loading..." : "All courses" },
-                                                    ...courses.map((c) => ({
-                                                        value: c.id,
-                                                        label: `${c.code} — ${c.title}`,
-                                                    })),
-                                                ] as Option<Course>[]}
-                                                value={courseId ?? ""}
-                                                onChange={(v) => setCourseId(v || undefined)}
-                                                disabled={isSearching || loadingCourses}
-                                                placeholder="All courses"
-                                            />
-                                        </div>
-                                        <Button
-                                            type="submit"
-                                            disabled={isSearching}
-                                            className="gap-2 w-full sm:w-auto"
-                                        >
-                                            {isSearching ? (
-                                                <>
-                                                    <Loader2 className="size-4 animate-spin" />
-                                                    Searching...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Search className="size-4" />
-                                                    Find Results
-                                                </>
-                                            )}
-                                        </Button>
                                     </div>
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-medium text-muted-foreground">
-                                                Focus
-                                            </span>
-                                            <select
-                                                value={componentFilter}
-                                                onChange={(e) =>
-                                                    setComponentFilter(
-                                                        e.target
-                                                            .value as
-                                                            | "all"
-                                                            | "theory"
-                                                            | "lab",
-                                                    )
-                                                }
-                                                disabled={isSearching}
-                                                className="h-8 rounded-md border bg-background px-2 text-xs"
-                                            >
-                                                <option value="all">
-                                                    All materials
-                                                </option>
-                                                <option value="theory">
-                                                    Theory only
-                                                </option>
-                                                <option value="lab">
-                                                    Lab / code only
-                                                </option>
-                                            </select>
-                                        </div>
-                                        {componentFilter === "lab" && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-medium text-muted-foreground">
-                                                    Language
-                                                </span>
-                                                <input
-                                                    type="text"
-                                                    value={language}
-                                                    onChange={(e) =>
-                                                        setLanguage(
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    placeholder="e.g. python, java (optional)"
-                                                    disabled={isSearching}
-                                                    className="h-8 w-full max-w-xs rounded-md border bg-background px-2 text-xs"
-                                                />
-                                            </div>
+                                    <Button
+                                        type="submit"
+                                        disabled={isSearching}
+                                        className="gap-2 w-full sm:w-auto"
+                                    >
+                                        {isSearching ? (
+                                            <>
+                                                <Loader2 className="size-4 animate-spin" />
+                                                Searching...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Search className="size-4" />
+                                                Find Results
+                                            </>
                                         )}
-                                    </div>
+                                    </Button>
                                 </form>
                                 {error && <ErrorState message={error} />}
                             </CardContent>

@@ -47,6 +47,8 @@ import {
   RefreshCw,
   Eye,
 } from "lucide-react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { atomOneLight } from "react-syntax-highlighter/dist/esm/styles/hljs";
 
 const MATERIAL_TYPES = ["slide", "pdf", "code", "note", "image"] as const;
 const CONTENT_TYPE_LABELS: Record<string, string> = {
@@ -221,6 +223,9 @@ function ContentPageInner() {
       swift: "code",
       kt: "code",
       php: "code",
+      // notebooks and archives
+      ipynb: "code",
+      zip: "code",
       // fallback
     };
     const fileType = fileTypeMap[ext] ?? "pdf";
@@ -278,6 +283,9 @@ function ContentPageInner() {
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedContent, setSelectedContent] = useState<CourseContent | null>(null);
+  const [codeText, setCodeText] = useState<string | null>(null);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   function openViewer(content: CourseContent) {
     setSelectedContent(content);
@@ -287,6 +295,74 @@ function ContentPageInner() {
   function closeViewer() {
     setViewerOpen(false);
     setSelectedContent(null);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCode() {
+      setCodeText(null);
+      setCodeError(null);
+      if (!selectedContent || selectedContent.content_type !== "code" || !selectedContent.file_url) {
+        return;
+      }
+      setCodeLoading(true);
+      try {
+        const res = await fetch(selectedContent.file_url);
+        if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
+        const ct = res.headers.get("content-type") || "";
+        const urlLower = (selectedContent.file_url || "").toLowerCase();
+        if (urlLower.endsWith(".ipynb") || ct.includes("application/json")) {
+          const json = await res.json();
+          const cells = json?.cells ?? [];
+          const parts: string[] = [];
+          for (const cell of cells) {
+            if (cell.cell_type === "markdown") {
+              parts.push("// MARKDOWN\n" + (cell.source || []).join(""));
+            } else if (cell.cell_type === "code") {
+              parts.push((cell.source || []).join(""));
+            }
+          }
+          if (!cancelled) setCodeText(parts.join("\n\n// ---\n\n"));
+        } else {
+          const text = await res.text();
+          if (!cancelled) setCodeText(text);
+        }
+      } catch (err: any) {
+        if (!cancelled) setCodeError(err?.message || String(err));
+      } finally {
+        if (!cancelled) setCodeLoading(false);
+      }
+    }
+    loadCode();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedContent]);
+ 
+  function inferLanguage(): string | undefined {
+    if (selectedContent?.language) return selectedContent.language;
+    const url = selectedContent?.file_url ?? "";
+    const ext = url.split(".").pop()?.toLowerCase() ?? "";
+    const map: Record<string, string> = {
+      py: "python",
+      js: "javascript",
+      ts: "typescript",
+      java: "java",
+      c: "c",
+      cpp: "cpp",
+      go: "go",
+      rs: "rust",
+      html: "html",
+      css: "css",
+      php: "php",
+      rb: "ruby",
+      swift: "swift",
+      kt: "kotlin",
+      json: "json",
+      ipynb: "python",
+      sh: "bash",
+    };
+    return map[ext] ?? undefined;
   }
 
   return (
@@ -421,7 +497,7 @@ function ContentPageInner() {
                     {/* Filters moved to the header for easier access */}
                   </div>
                 </CardHeader>
-                <CardContent className="relative space-y-3">
+                <CardContent className="relative space-y-3 overflow-auto max-h-[60vh] lg:max-h-[calc(100vh-12rem)] pr-2">
                   {!selectedCourseId ? (
                     <EmptyState
                       icon={BookOpen}
@@ -551,6 +627,52 @@ function ContentPageInner() {
                           <div className="h-[70vh]">
                             <iframe src={selectedContent.file_url} className="w-full h-full border-0" title={selectedContent.title} />
                           </div>
+                        ) : selectedContent.content_type === "code" ? (
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Language:</span>
+                                <Badge variant="outline">{selectedContent.language ?? "code"}</Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={async () => {
+                                    if (codeText) {
+                                      await navigator.clipboard.writeText(codeText);
+                                    }
+                                  }}
+                                  disabled={!codeText}
+                                >
+                                  Copy
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="h-[60vh] overflow-auto rounded border border-border/60 bg-muted/5 p-3">
+                              {codeLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Loader2 className="size-4 animate-spin" />
+                                  Loading file…
+                                </div>
+                              ) : codeError ? (
+                                <div className="text-sm text-destructive">{codeError}</div>
+                              ) : codeText ? (
+                                <SyntaxHighlighter
+                                  language={inferLanguage()}
+                                  style={atomOneLight}
+                                  showLineNumbers
+                                  wrapLongLines
+                                  customStyle={{ margin: 0, background: "transparent", fontSize: 13 }}
+                                >
+                                  {codeText}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <div className="text-sm text-muted-foreground">Unable to preview this file.</div>
+                              )}
+                            </div>
+                          </div>
                         ) : (
                           <div>
                             <p className="text-sm text-muted-foreground">{selectedContent.title}</p>
@@ -610,7 +732,7 @@ function ContentPageInner() {
                           <div className="flex flex-wrap items-center gap-2">
                             <Input
                               type="file"
-                              accept=".pdf,.ppt,.pptx,.odp,.doc,.docx,.txt,.md,.py,.js,.ts,.java,.c,.cpp,.h,.cs,.rb,.go,.rs,.swift,.kt,.php,.png,.jpg,.jpeg,.gif,.webp"
+                              accept=".pdf,.ppt,.pptx,.odp,.doc,.docx,.txt,.md,.py,.js,.ts,.java,.c,.cpp,.h,.cs,.rb,.go,.rs,.swift,.kt,.php,.ipynb,.zip,.png,.jpg,.jpeg,.gif,.webp"
                               onChange={(e) =>
                                 setUploadFileInput(e.target.files?.[0] ?? null)
                               }
