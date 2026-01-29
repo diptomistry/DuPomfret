@@ -3,28 +3,39 @@
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { useAuthStore } from "@/store/useAuthStore";
-import { ROUTES, API_BASE_URL } from "@/lib/constants";
-import type { UserRole } from "@/store/useAuthStore";
+import { useAuthStore, type UserRole } from "@/store/useAuthStore";
+import { ROUTES, BEARER_TOKEN_STORAGE_KEY } from "@/lib/constants";
+import type { Session } from "@supabase/supabase-js";
 
-const BEARER_TOKEN_KEY = "bearer_tokenBUET";
-
-async function fetchMeRole(accessToken: string): Promise<UserRole> {
-  const res = await fetch(`${API_BASE_URL}/auth/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) return "student";
-  const data = (await res.json()) as { role?: string };
-  const role = (data.role ?? "student").toLowerCase();
-  return role === "admin" ? "admin" : "student";
-}
-
-function syncTokenToStorage(session: { access_token: string } | null) {
+function syncTokenToStorage(session: Session | null) {
   if (typeof window === "undefined") return;
   if (session?.access_token) {
-    localStorage.setItem(BEARER_TOKEN_KEY, session.access_token);
+    localStorage.setItem(BEARER_TOKEN_STORAGE_KEY, session.access_token);
   } else {
-    localStorage.removeItem(BEARER_TOKEN_KEY);
+    localStorage.removeItem(BEARER_TOKEN_STORAGE_KEY);
+  }
+}
+
+async function fetchUserRole(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<UserRole> {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    if (error || !data) {
+      console.warn("Failed to fetch user role:", error);
+      return "student"; // Default to student if not found
+    }
+
+    return (data.role as UserRole) || "student";
+  } catch (error) {
+    console.warn("Error fetching user role:", error);
+    return "student"; // Default to student on error
   }
 }
 
@@ -34,32 +45,69 @@ export function useAuth() {
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    const applySession = (session: { access_token: string; user: any } | null) => {
-      setUser(session?.user ?? null, session ?? null);
-      syncTokenToStorage(session ?? null);
-      if (session?.access_token) {
-        fetchMeRole(session.access_token).then(setRole);
+    // Initialize auth state immediately
+    let mounted = true;
+
+    async function initializeAuth() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        const user = session?.user ?? null;
+        setUser(user, session ?? null);
+
+        if (user?.id) {
+          const role = await fetchUserRole(supabase, user.id);
+          if (mounted) {
+            setRole(role);
+          }
+        } else {
+          setRole("student");
+        }
+
+        syncTokenToStorage(session ?? null);
+      } catch (err) {
+        console.error("Failed to initialize auth:", err);
+        if (mounted) {
+          setUser(null, null);
+          setRole("student");
+        }
+      }
+    }
+
+    initializeAuth();
+
+    // Listen for auth state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+
+      const user = session?.user ?? null;
+      setUser(user, session ?? null);
+
+      if (user?.id) {
+        const role = await fetchUserRole(supabase, user.id);
+        if (mounted) {
+          setRole(role);
+        }
       } else {
         setRole("student");
       }
+
+      syncTokenToStorage(session ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
     };
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      applySession(session ?? null);
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      applySession(session ?? null);
-    });
-
-    return () => subscription.unsubscribe();
   }, [supabase, setUser, setRole]);
 
   async function logout() {
     await supabase.auth.signOut();
-    if (typeof window !== "undefined") localStorage.removeItem(BEARER_TOKEN_KEY);
+    if (typeof window !== "undefined")
+      localStorage.removeItem(BEARER_TOKEN_STORAGE_KEY);
     clearStore();
     router.push(ROUTES.HOME);
     router.refresh();
