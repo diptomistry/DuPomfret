@@ -54,8 +54,23 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="Student message to the assistant")
 
 
+class SourceMetadata(BaseModel):
+    type: str = ""
+    source: str = ""
+    url: str | None = None
+    category: str | None = None
+    topic: str | None = None
+    language: str | None = None
+
+
+class SourceResponse(BaseModel):
+    content: str
+    metadata: SourceMetadata
+
+
 class ChatResponse(BaseModel):
     answer: str
+    sources: list[SourceResponse] = []
 
 
 @router.post("/chat/{session_id}", response_model=ChatResponse)
@@ -79,7 +94,24 @@ async def chat(
             user_id=current_user.user_id,
             message=request.message,
         )
-        return ChatResponse(answer=result["answer"])
+        
+        # Format sources for response
+        sources = []
+        for src in result.get("sources", []):
+            metadata = src.get("metadata", {})
+            sources.append(SourceResponse(
+                content=src.get("content", ""),
+                metadata=SourceMetadata(
+                    type=metadata.get("type", ""),
+                    source=metadata.get("source", ""),
+                    url=metadata.get("url"),
+                    category=metadata.get("category"),
+                    topic=metadata.get("topic"),
+                    language=metadata.get("language"),
+                )
+            ))
+        
+        return ChatResponse(answer=result["answer"], sources=sources)
     except PermissionError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

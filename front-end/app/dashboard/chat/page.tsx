@@ -62,6 +62,8 @@ interface ChatSession {
     messages: Message[];
     createdAt: string;
     updatedAt: string;
+    backendSessionId?: string; // Session ID from backend API
+    courseId?: string; // Course ID associated with this session
 }
 
 interface Course {
@@ -165,6 +167,8 @@ export default function ChatPage() {
             messages: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
+            backendSessionId: undefined, // Will be created when first message is sent
+            courseId: courseId || undefined,
         };
         setSessions((prev) => [newSession, ...prev]);
         setCurrentSessionId(newSession.id);
@@ -237,24 +241,34 @@ export default function ChatPage() {
         const content = input.trim();
         if (!content && uploadedImages.length === 0) return;
 
+        if (!courseId) {
+            setError("Please select a course first.");
+            return;
+        }
+
         setInput("");
         const imagesToSend = [...uploadedImages];
         setUploadedImages([]);
         setError(null);
 
-        // Ensure we have a session
+        // Ensure we have a local session
         let sessionId = currentSessionId;
-        if (!sessionId) {
+        let localSession = sessions.find((s) => s.id === sessionId);
+
+        if (!sessionId || !localSession) {
             const newSession: ChatSession = {
                 id: crypto.randomUUID(),
                 title: "New Chat",
                 messages: [],
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
+                backendSessionId: undefined,
+                courseId: courseId,
             };
             setSessions((prev) => [newSession, ...prev]);
             setCurrentSessionId(newSession.id);
             sessionId = newSession.id;
+            localSession = newSession;
         }
 
         const userMessage: Message = {
@@ -284,47 +298,77 @@ export default function ChatPage() {
                 throw new Error("Not authenticated. Please log in.");
             }
 
-            // Print bearer token for debugging
-            console.log("Bearer Token:", session.access_token);
-            console.log("User ID:", session.user.id);
-            console.log(
-                "Token expires at:",
-                new Date(session.expires_at! * 1000).toLocaleString(),
-            );
-
-            // Call RAG search endpoint
             const apiUrl =
                 process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-            console.log(
-                "Making request to:",
-                `${apiUrl}/courses/${courseId}/search`,
-            );
-            console.log("Course ID:", courseId);
-            console.log("Query:", content || "Analyze these images");
+            // Check if we need to create a backend session
+            let backendSessionId = localSession?.backendSessionId;
 
-            // Prepare request body with images
-            const requestBody: any = {
-                query: content || "Analyze these images",
-                top_k: 5,
-            };
+            // Create backend session if not exists or if course changed
+            if (!backendSessionId || localSession?.courseId !== courseId) {
+                console.log(
+                    "Creating new backend chat session for course:",
+                    courseId,
+                );
 
-            // If images are present, include them in the request
-            if (imagesToSend.length > 0) {
-                requestBody.images = imagesToSend;
-            }
-
-            const response = await fetch(
-                `${apiUrl}/courses/${courseId}/search`,
-                {
+                const sessionResponse = await fetch(`${apiUrl}/chat/session`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                         Authorization: `Bearer ${session.access_token}`,
                     },
-                    body: JSON.stringify(requestBody),
-                },
+                    body: JSON.stringify({
+                        course_id: courseId,
+                    }),
+                });
+
+                if (!sessionResponse.ok) {
+                    const errorData = await sessionResponse
+                        .json()
+                        .catch(() => null);
+                    throw new Error(
+                        errorData?.detail ||
+                            `Failed to create chat session: ${sessionResponse.status}`,
+                    );
+                }
+
+                const sessionData = await sessionResponse.json();
+                backendSessionId = sessionData.id;
+
+                // Update the local session with backend session ID and course ID
+                setSessions((prev) =>
+                    prev.map((s) =>
+                        s.id === sessionId
+                            ? {
+                                  ...s,
+                                  backendSessionId: backendSessionId,
+                                  courseId: courseId,
+                                  updatedAt: new Date().toISOString(),
+                              }
+                            : s,
+                    ),
+                );
+
+                console.log("Backend session created:", backendSessionId);
+            }
+
+            console.log(
+                "Sending message to backend session:",
+                backendSessionId,
             );
+            console.log("Message:", content || "Analyze these images");
+
+            // Send message to chat endpoint
+            const response = await fetch(`${apiUrl}/chat/${backendSessionId}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    message: content || "Analyze these images",
+                }),
+            });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => null);
@@ -356,13 +400,6 @@ export default function ChatPage() {
             }
         } catch (err) {
             console.error("Chat error:", err);
-            console.error("Error details:", {
-                courseId,
-                apiUrl:
-                    process.env.NEXT_PUBLIC_API_BASE_URL ||
-                    "http://localhost:8000",
-                endpoint: `/courses/${courseId}/search`,
-            });
             const errorMessage =
                 err instanceof Error
                     ? err.message
@@ -707,9 +744,7 @@ export default function ChatPage() {
                                                             <div className="flex items-center gap-2">
                                                                 <Loader2 className="size-4 animate-spin text-primary" />
                                                                 <span className="text-sm text-muted-foreground">
-                                                                    Searching
-                                                                    course
-                                                                    materials...
+                                                                    Thinking...
                                                                 </span>
                                                             </div>
                                                         </div>
