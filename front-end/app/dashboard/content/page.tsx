@@ -2,10 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
+import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { EmptyState, ErrorState } from "@/components/ui/empty-state";
+import { SkeletonList } from "@/components/ui/skeleton";
 import { CourseComponent, CourseMaterial, uploadMaterial, listMaterials } from "@/lib/api";
+import { Upload, FileText, ExternalLink, Loader2, FolderOpen, Calendar } from "lucide-react";
 
 const MATERIAL_TYPES = ["slide", "pdf", "code", "note", "other"] as const;
 
@@ -72,194 +79,242 @@ export default function ContentPage() {
   }
 
   return (
-    <div className="min-h-svh bg-background">
+    <div className="min-h-svh">
       <Navbar />
-      <main className="container px-4 py-8 sm:px-6">
-        <div className="mx-auto max-w-5xl space-y-8">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Course Content CMS
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              Upload and organize Theory and Lab materials with rich metadata.
-            </p>
-          </div>
+      <AppShell>
+        <div className="page-shell">
+          <div className="page-stack">
+            {/* Header */}
+            <div className="page-header">
+              <h1 className="page-title">Course Materials</h1>
+              <p className="page-description">
+                Upload and organize your Theory and Lab files.
+              </p>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Upload material</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <form
-                className="grid gap-4 md:grid-cols-2"
-                onSubmit={handleUpload}
-              >
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium">Title</label>
-                  <Input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Week 3 – Sorting Algorithms"
-                  />
-                </div>
+            {/* Upload Form Card */}
+            <Card>
+              <CardHeader className="p-3 sm:p-6 pb-3 sm:pb-4">
+                <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                  <Upload className="size-4 sm:size-5 text-primary" />
+                  Upload File
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Add new materials with metadata for better organization.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 p-3 sm:p-6 pt-0">
+                <form
+                  className="grid gap-3 sm:gap-4 md:grid-cols-2"
+                  onSubmit={handleUpload}
+                >
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="title" className="text-xs sm:text-sm">Title</Label>
+                    <Input
+                      id="title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="e.g. Week 3 – Sorting Algorithms"
+                      disabled={isLoading}
+                      className="text-sm"
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Component</label>
-                  <select
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={component}
-                    onChange={(e) =>
-                      setComponent(e.target.value as CourseComponent)
-                    }
-                  >
-                    <option value="theory">Theory</option>
-                    <option value="lab">Lab</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Type</label>
-                  <select
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={type}
-                    onChange={(e) =>
-                      setType(e.target.value as (typeof MATERIAL_TYPES)[number])
-                    }
-                  >
-                    {MATERIAL_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Week</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={week}
-                    onChange={(e) => setWeek(e.target.value)}
-                    placeholder="e.g. 3"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium">Topic</label>
-                  <Input
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    placeholder="e.g. Divide and Conquer"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium">
-                    Tags (comma-separated)
-                  </label>
-                  <Input
-                    value={tags}
-                    onChange={(e) => setTags(e.target.value)}
-                    placeholder="e.g. sorting, complexity, merge-sort"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium">File</label>
-                  <Input
-                    type="file"
-                    onChange={(e) =>
-                      setFile(e.target.files ? e.target.files[0] : null)
-                    }
-                  />
-                </div>
-
-                <div className="md:col-span-2 flex justify-end gap-2">
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading ? "Uploading..." : "Upload material"}
-                  </Button>
-                </div>
-              </form>
-              {error && (
-                <p className="text-sm text-destructive" aria-live="polite">
-                  {error}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Existing materials</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isLoading && materials.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Loading materials...
-                </p>
-              ) : materials.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No materials yet. Upload your first lecture or lab file above.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {materials.map((m) => (
-                    <div
-                      key={m.id}
-                      className="flex flex-col gap-1 rounded-md border border-border px-3 py-2 text-sm"
+                  <div className="space-y-2">
+                    <Label htmlFor="component" className="text-xs sm:text-sm">Component</Label>
+                    <Select
+                      id="component"
+                      value={component}
+                      onChange={(e) =>
+                        setComponent(e.target.value as CourseComponent)
+                      }
+                      disabled={isLoading}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-medium">{m.title}</span>
-                        <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] uppercase">
-                            {m.component}
-                          </span>
-                          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] uppercase">
-                            {m.type}
-                          </span>
-                          {m.week && <span>Week {m.week}</span>}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        {m.topic && <span>{m.topic}</span>}
-                        {m.tags && m.tags.length > 0 && (
-                          <span className="flex flex-wrap gap-1">
-                            {m.tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="rounded bg-muted px-1.5 py-0.5"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </span>
-                        )}
-                        {m.url && (
-                          <Button
-                            asChild
-                            size="xs"
-                            variant="link"
-                            className="px-0 text-xs"
-                          >
-                            <a
-                              href={m.url}
-                              target="_blank"
-                              rel="noreferrer"
+                      <option value="theory">Theory</option>
+                      <option value="lab">Lab</option>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="type" className="text-xs sm:text-sm">Type</Label>
+                    <Select
+                      id="type"
+                      value={type}
+                      onChange={(e) =>
+                        setType(e.target.value as (typeof MATERIAL_TYPES)[number])
+                      }
+                      disabled={isLoading}
+                    >
+                      {MATERIAL_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t.charAt(0).toUpperCase() + t.slice(1)}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="week" className="text-xs sm:text-sm">Week</Label>
+                    <Input
+                      id="week"
+                      type="number"
+                      min={1}
+                      value={week}
+                      onChange={(e) => setWeek(e.target.value)}
+                      placeholder="e.g. 3"
+                      disabled={isLoading}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="topic" className="text-xs sm:text-sm">Topic</Label>
+                    <Input
+                      id="topic"
+                      value={topic}
+                      onChange={(e) => setTopic(e.target.value)}
+                      placeholder="e.g. Divide and Conquer"
+                      disabled={isLoading}
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="tags" className="text-xs sm:text-sm">Tags (comma-separated)</Label>
+                    <Input
+                      id="tags"
+                      value={tags}
+                      onChange={(e) => setTags(e.target.value)}
+                      placeholder="e.g. sorting, complexity, merge-sort"
+                      disabled={isLoading}
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="file" className="text-xs sm:text-sm">File</Label>
+                    <Input
+                      id="file"
+                      type="file"
+                      onChange={(e) =>
+                        setFile(e.target.files ? e.target.files[0] : null)
+                      }
+                      disabled={isLoading}
+                      className="text-sm file:mr-3 sm:file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 sm:file:px-4 file:py-1.5 sm:file:py-2 file:text-xs sm:file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 flex justify-end gap-2">
+                    <Button type="submit" disabled={isLoading} className="gap-2 w-full sm:w-auto">
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="size-4" />
+                          Upload File
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+
+                {error && <ErrorState message={error} />}
+              </CardContent>
+            </Card>
+
+            {/* Materials List Card */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FolderOpen className="size-5 text-muted-foreground" />
+                  Existing Materials
+                  {materials.length > 0 && (
+                    <Badge variant="secondary" className="ml-auto">
+                      {materials.length} files
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {isLoading && materials.length === 0 ? (
+                  <SkeletonList count={3} />
+                ) : materials.length === 0 ? (
+                  <EmptyState
+                    icon={FileText}
+                    title="No materials yet"
+                    description="Upload your first lecture or lab file above to get started."
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {materials.map((m) => (
+                      <div
+                        key={m.id}
+                        className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/30 px-4 py-3 backdrop-blur-sm transition-colors hover:bg-muted/50"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium text-sm">{m.title}</span>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={m.component === "lab" ? "lab" : "theory"}
                             >
-                              Open file
-                            </a>
-                          </Button>
-                        )}
+                              {m.component}
+                            </Badge>
+                            <Badge variant="outline">{m.type}</Badge>
+                            {m.week && (
+                              <Badge variant="secondary" className="gap-1">
+                                <Calendar className="size-3" />
+                                Week {m.week}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {m.topic && (
+                            <span className="rounded-md bg-accent/50 px-2 py-0.5">
+                              {m.topic}
+                            </span>
+                          )}
+                          {m.tags && m.tags.length > 0 && (
+                            <span className="flex flex-wrap gap-1">
+                              {m.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded-md bg-muted/60 px-2 py-0.5"
+                                >
+                                  #{tag}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                          {m.url && (
+                            <Button
+                              asChild
+                              size="xs"
+                              variant="link"
+                              className="ml-auto gap-1 px-0 text-xs text-primary"
+                            >
+                              <a
+                                href={m.url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <ExternalLink className="size-3" />
+                                Open file
+                              </a>
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </main>
+      </AppShell>
     </div>
   );
 }

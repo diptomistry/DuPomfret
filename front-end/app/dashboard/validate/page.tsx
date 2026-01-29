@@ -2,10 +2,18 @@
 
 import { useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
+import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { ErrorState } from "@/components/ui/empty-state";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import { validateCodeSnippet } from "@/lib/api";
+import { CheckCircle, XCircle, AlertTriangle, Code, Loader2, Terminal } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function ValidatePage() {
   const [language, setLanguage] = useState("python");
@@ -37,94 +45,172 @@ export default function ValidatePage() {
   }
 
   return (
-    <div className="min-h-svh bg-background">
+    <div className="min-h-svh">
       <Navbar />
-      <main className="container px-4 py-8 sm:px-6">
-        <div className="mx-auto max-w-4xl space-y-8">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Code Validation & Evaluation
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              Check syntax, run automated tests, and surface diagnostics for lab
-              code snippets.
-            </p>
-          </div>
+      <AppShell>
+        <div className="page-shell">
+          <div className="page-stack">
+            {/* Header */}
+            <div className="page-header">
+              <h1 className="page-title">Code Checker</h1>
+              <p className="page-description">
+                Check syntax, run tests, and get diagnostics for your lab code.
+              </p>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Validate code</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <form className="space-y-4" onSubmit={handleValidate}>
-                <div className="grid gap-4 sm:grid-cols-[1fr,2fr]">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Language</label>
-                    <Input
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value)}
-                      placeholder="e.g. python, cpp, java"
-                    />
+            {/* Validation Form */}
+            <Card>
+              <CardHeader className="p-3 sm:p-6 pb-3 sm:pb-4">
+                <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                  <Code className="size-4 sm:size-5 text-primary" />
+                  Validate Code
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Paste your code and select a language to check.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 p-3 sm:p-6 pt-0">
+                <form className="space-y-4" onSubmit={handleValidate}>
+                  <div className="grid gap-3 sm:gap-4 sm:grid-cols-[180px,1fr]">
+                    <div className="space-y-2">
+                      <Label htmlFor="language" className="text-xs sm:text-sm">Language</Label>
+                      <Input
+                        id="language"
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        placeholder="e.g. python, cpp, java"
+                        disabled={isChecking}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <label className="text-sm font-medium">
-                      Code snippet to validate
-                    </label>
-                    <textarea
-                      className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+
+                  <div className="space-y-2">
+                    <Label htmlFor="code">Code Snippet</Label>
+                    <Textarea
+                      id="code"
+                      className="min-h-[250px] font-mono text-sm"
                       value={code}
                       onChange={(e) => setCode(e.target.value)}
                       placeholder="Paste generated or student lab code here..."
+                      disabled={isChecking}
                     />
                   </div>
-                </div>
-                <Button type="submit" disabled={isChecking}>
-                  {isChecking ? "Validating..." : "Run validation"}
-                </Button>
-              </form>
-              {error && (
-                <p className="text-sm text-destructive" aria-live="polite">
-                  {error}
-                </p>
-              )}
-            </CardContent>
-          </Card>
 
-          {result && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Validation result</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p
-                  className={
-                    result.isValid
-                      ? "text-sm font-medium text-emerald-600 dark:text-emerald-400"
-                      : "text-sm font-medium text-destructive"
-                  }
-                >
-                  {result.isValid
-                    ? "Code passed basic validation."
-                    : "Issues detected in the provided code."}
-                </p>
-                {typeof result.testsPassed === "boolean" && (
-                  <p className="text-sm text-muted-foreground">
-                    Automated tests:{" "}
-                    {result.testsPassed ? "all passed" : "some failed"}
-                  </p>
-                )}
-                {result.diagnostics && result.diagnostics.length > 0 && (
-                  <ul className="space-y-1 text-sm text-muted-foreground">
-                    {result.diagnostics.map((d, idx) => (
-                      <li key={idx}>• {d}</li>
-                    ))}
-                  </ul>
-                )}
+                  <Button
+                    type="submit"
+                    disabled={isChecking || !code.trim()}
+                    className="gap-2 w-full sm:w-auto"
+                  >
+                    {isChecking ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Checking...
+                      </>
+                    ) : (
+                      <>
+                        <Terminal className="size-4" />
+                        Check Code
+                      </>
+                    )}
+                  </Button>
+                </form>
+
+                {error && <ErrorState message={error} />}
               </CardContent>
             </Card>
-          )}
+
+            {/* Loading State */}
+            {isChecking && <SkeletonCard />}
+
+            {/* Result Card */}
+            {!isChecking && result && (
+              <Card
+                className={cn(
+                  "border-2",
+                  result.isValid
+                    ? "border-success/40"
+                    : "border-destructive/40"
+                )}
+              >
+                <CardHeader className="p-3 sm:p-6 pb-3 sm:pb-4">
+                  <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                    {result.isValid ? (
+                      <CheckCircle className="size-4 sm:size-5 text-success" />
+                    ) : (
+                      <XCircle className="size-4 sm:size-5 text-destructive" />
+                    )}
+                    Validation Result
+                    <Badge
+                      variant={result.isValid ? "success" : "destructive"}
+                      className="ml-auto"
+                    >
+                      {result.isValid ? "Passed" : "Issues Found"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Status Message */}
+                  <p
+                    className={cn(
+                      "text-sm font-medium",
+                      result.isValid
+                        ? "text-success"
+                        : "text-destructive"
+                    )}
+                  >
+                    {result.isValid
+                      ? "✓ Code passed basic validation."
+                      : "✗ Issues detected in the provided code."}
+                  </p>
+
+                  {/* Test Results */}
+                  {typeof result.testsPassed === "boolean" && (
+                    <div className="flex items-center gap-2 text-sm">
+                      {result.testsPassed ? (
+                        <CheckCircle className="size-4 text-success" />
+                      ) : (
+                        <AlertTriangle className="size-4 text-yellow-500" />
+                      )}
+                      <span className="text-muted-foreground">
+                        Automated tests:{" "}
+                        <span
+                          className={
+                            result.testsPassed
+                              ? "text-success"
+                              : "text-yellow-500"
+                          }
+                        >
+                          {result.testsPassed ? "all passed" : "some failed"}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Diagnostics */}
+                  {result.diagnostics && result.diagnostics.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Diagnostics:
+                      </p>
+                      <ul className="space-y-1.5 rounded-lg border border-border/60 bg-muted/30 p-4 backdrop-blur-sm">
+                        {result.diagnostics.map((d, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-start gap-2 text-sm text-muted-foreground"
+                          >
+                            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-destructive" />
+                            <span className="font-mono text-xs">{d}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
-      </main>
+      </AppShell>
     </div>
   );
 }

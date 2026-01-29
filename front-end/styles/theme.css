@@ -3,66 +3,99 @@
 :root {
   --radius: 0.9rem;
 
+  /* Glassmorphism design tokens */
+  --glass-blur: 16px;
+  --glass-blur-strong: 24px;
+  --glass-saturation: 1.2;
+  --glass-border-opacity: 0.18;
+  --glass-shadow: 0 8px 32px -8px oklch(0.3 0.05 260 / 0.12);
+  --glass-shadow-lg: 0 16px 48px -12px oklch(0.3 0.05 260 / 0.18);
+  --glow-primary: 0 0 24px -4px oklch(0.6 0.16 260 / 0.35);
+  --glow-accent: 0 0 20px -4px oklch(0.78 0.16 265 / 0.3);
+  --glow-success: 0 0 20px -4px oklch(0.7 0.18 145 / 0.35);
+
   /* Soft glassy light background with subtle gradient */
-  --background: oklch(0.99 0.01 230);
-  --foreground: oklch(0.2 0.03 250);
+  --background: oklch(0.98 0.01 250);
+  --foreground: oklch(0.18 0.03 250);
 
   /* Cards and surfaces: translucent white glass */
-  --card: color-mix(in oklch, oklch(1 0 0) 80%, transparent);
+  --card: color-mix(in oklch, oklch(1 0 0) 75%, transparent);
   --card-foreground: var(--foreground);
 
-  --popover: color-mix(in oklch, oklch(1 0 0) 82%, transparent);
+  --popover: color-mix(in oklch, oklch(1 0 0) 80%, transparent);
   --popover-foreground: var(--foreground);
 
   /* Accent colors */
-  --primary: oklch(0.6 0.16 260);
+  --primary: oklch(0.55 0.18 260);
   --primary-foreground: oklch(0.99 0.01 230);
 
-  --secondary: color-mix(in oklch, oklch(0.98 0.02 210) 70%, transparent);
+  --secondary: color-mix(in oklch, oklch(0.97 0.02 250) 65%, transparent);
   --secondary-foreground: var(--foreground);
 
-  --muted: color-mix(in oklch, oklch(0.97 0.01 230) 60%, transparent);
-  --muted-foreground: oklch(0.55 0.03 250);
+  --muted: color-mix(in oklch, oklch(0.96 0.01 250) 55%, transparent);
+  --muted-foreground: oklch(0.45 0.03 250);
 
-  --accent: color-mix(in oklch, oklch(0.98 0.04 280) 70%, transparent);
+  --accent: color-mix(in oklch, oklch(0.96 0.05 280) 65%, transparent);
   --accent-foreground: var(--foreground);
 
-  --destructive: oklch(0.6 0.21 25);
+  --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
 
+  /* Success color */
+  --success: oklch(0.65 0.2 145);
+  --success-foreground: oklch(0.99 0 0);
+
   /* Borders and inputs: hairline frosted edges */
-  --border: oklch(0.93 0 0 / 0.65);
-  --input: oklch(0.93 0 0 / 0.85);
-  --ring: oklch(0.75 0.09 260);
+  --border: oklch(0.5 0.02 260 / 0.15);
+  --input: oklch(0.5 0.02 260 / 0.12);
+  --ring: oklch(0.55 0.12 260);
 }
 
-.dark {
-  /* Deep glassy gradient background */
-  --background: oklch(0.18 0.08 260);
-  --foreground: oklch(0.97 0.02 230);
+.dark,
+:root.dark {
+  /* Glassmorphism tokens for dark mode */
+  --glass-blur: 20px;
+  --glass-blur-strong: 32px;
+  --glass-border-opacity: 0.15;
+  --glass-shadow: 0 8px 32px -8px oklch(0 0 0 / 0.6);
+  --glass-shadow-lg: 0 20px 50px -12px oklch(0 0 0 / 0.7);
+  --glow-primary: 0 0 40px -6px oklch(0.7 0.22 270 / 0.5);
+  --glow-accent: 0 0 32px -6px oklch(0.65 0.2 300 / 0.45);
+  --glow-success: 0 0 28px -6px oklch(0.65 0.22 145 / 0.5);
 
-  --card: color-mix(in oklch, oklch(0.16 0.03 250) 55%, transparent);
-  --card-foreground: var(--foreground);
+  /* Rich deep background */
+  --background: oklch(0.12 0.04 270);
+  --foreground: oklch(0.95 0.01 250);
 
-  --popover: color-mix(in oklch, oklch(0.14 0.03 250) 60%, transparent);
-  --popover-foreground: var(--foreground);
+  /* Cards: visible glass effect */
+  --card: oklch(0.18 0.03 270 / 0.7);
+  --card-foreground: oklch(0.95 0.01 250);
 
-  --primary: oklch(0.78 0.16 265);
-  --primary-foreground: oklch(0.16 0.03 250);
+  --popover: oklch(0.16 0.03 270 / 0.85);
+  --popover-foreground: oklch(0.95 0.01 250);
 
-  --secondary: color-mix(in oklch, oklch(0.25 0.03 250) 60%, transparent);
-  --secondary-foreground: var(--foreground);
+  /* Vibrant primary for dark mode */
+  --primary: oklch(0.72 0.2 270);
+  --primary-foreground: oklch(0.12 0.02 270);
 
-  --muted: color-mix(in oklch, oklch(0.22 0.03 250) 55%, transparent);
-  --muted-foreground: oklch(0.74 0.05 260);
+  --secondary: oklch(0.24 0.04 270 / 0.8);
+  --secondary-foreground: oklch(0.92 0.01 250);
 
-  --accent: color-mix(in oklch, oklch(0.36 0.08 280) 65%, transparent);
-  --accent-foreground: var(--foreground);
+  --muted: oklch(0.22 0.03 270 / 0.6);
+  --muted-foreground: oklch(0.7 0.03 260);
 
-  --destructive: oklch(0.68 0.2 20);
-  --destructive-foreground: var(--foreground);
+  --accent: oklch(0.35 0.12 290 / 0.7);
+  --accent-foreground: oklch(0.95 0.01 250);
 
-  --border: oklch(0.9 0 0 / 0.22);
-  --input: oklch(0.9 0 0 / 0.35);
-  --ring: oklch(0.76 0.12 265);
+  --destructive: oklch(0.6 0.24 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  /* Success color */
+  --success: oklch(0.68 0.22 150);
+  --success-foreground: oklch(0.12 0 0);
+
+  /* More visible borders in dark mode */
+  --border: oklch(1 0 0 / 0.12);
+  --input: oklch(1 0 0 / 0.1);
+  --ring: oklch(0.72 0.18 270);
 }

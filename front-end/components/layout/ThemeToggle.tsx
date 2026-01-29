@@ -19,13 +19,13 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <div className="flex size-10 items-center justify-center rounded-md border border-input bg-background" />
+      <div className="flex size-9 sm:size-10 items-center justify-center rounded-xl border border-input bg-muted/50" />
     );
   }
 
   const currentIndex = themes.findIndex((t) => t.value === theme);
+  const CurrentIcon = themes[currentIndex]?.icon || Sun;
   const next = themes[(currentIndex + 1) % themes.length];
-  const Icon = next.icon;
 
   return (
     <Button
@@ -34,9 +34,12 @@ export function ThemeToggle() {
       size="icon"
       aria-label={`Theme: ${theme}. Switch to ${next.value}.`}
       onClick={() => setTheme(next.value)}
-      className={cn("size-9")}
+      className={cn(
+        "size-9 sm:size-10 rounded-xl transition-all duration-200",
+        "hover:bg-primary/10 hover:text-primary"
+      )}
     >
-      <Icon className="size-4" data-slot="icon" />
+      <CurrentIcon className="size-4 sm:size-5 transition-transform duration-200" data-slot="icon" />
     </Button>
   );
 }
